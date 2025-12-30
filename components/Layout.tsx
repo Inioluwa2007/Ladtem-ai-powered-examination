@@ -11,9 +11,10 @@ interface LayoutProps {
   onRoleSwitch: () => void;
   appTheme: AppTheme;
   onSetTheme: (theme: AppTheme) => void;
+  onOpenSync: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, role, userName, onRoleSwitch, appTheme, onSetTheme }) => {
+const Layout: React.FC<LayoutProps> = ({ children, role, userName, onRoleSwitch, appTheme, onSetTheme, onOpenSync }) => {
   const [showThemeMenu, setShowThemeMenu] = useState(false);
 
   const themes: { id: AppTheme; name: string; bg: string; color: string }[] = [
@@ -34,19 +35,28 @@ const Layout: React.FC<LayoutProps> = ({ children, role, userName, onRoleSwitch,
               <div className="bg-white p-1 rounded-xl shadow-md border-2 border-slate-200">
                 <BrandingLogo className="w-12 h-12 object-contain" />
               </div>
-              <span className="text-xl font-extrabold text-slate-900 tracking-tighter uppercase">
+              <span className="text-xl font-extrabold text-slate-900 tracking-tighter uppercase hidden md:inline">
                 {brandParts[0]} <span className="text-indigo-600">{brandParts.slice(1).join(' ')}</span>
               </span>
             </div>
             
-            <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-4 md:space-x-6">
+              <button 
+                onClick={onOpenSync}
+                className="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-all border border-slate-200"
+                title="Sync Data Across Devices"
+              >
+                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 hidden sm:inline">Sync Link</span>
+              </button>
+
               <div className="relative">
                 <button 
                   onClick={() => setShowThemeMenu(!showThemeMenu)}
                   className="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-all border border-slate-200"
                 >
                   <div className={`w-3 h-3 rounded-full ${themes.find(t => t.id === appTheme)?.color}`}></div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Theme</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 hidden sm:inline">Theme</span>
                 </button>
 
                 {showThemeMenu && (
@@ -77,7 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role, userName, onRoleSwitch,
               </div>
               <button 
                 onClick={onRoleSwitch}
-                className="text-xs bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl transition-all font-bold shadow-sm active:scale-95 uppercase tracking-widest"
+                className="text-[10px] bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl transition-all font-bold shadow-sm active:scale-95 uppercase tracking-widest"
               >
                 Sign Out
               </button>
