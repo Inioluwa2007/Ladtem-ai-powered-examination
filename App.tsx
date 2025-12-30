@@ -113,9 +113,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<'IDLE' | 'PULLING' | 'READY' | 'ERROR'>('IDLE');
   
-  // Ref to prevent "push-loops" when we just pulled data
   const isInternalUpdate = useRef(false);
-  // Guard to prevent an empty device from overwriting the cloud on first load
   const hasInitialPullCompleted = useRef(false);
 
   const notify = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -123,9 +121,7 @@ const App: React.FC = () => {
   }, []);
 
   const triggerPush = useCallback(async () => {
-    // SECURITY: Only push if we have successfully completed our first handshake with the cloud
     if (!hasInitialPullCompleted.current || cloudStatus !== 'READY' || isInternalUpdate.current) return;
-    
     setIsSyncing(true);
     const state = { institutes, departments, users, exams, submissions, gradingResults };
     await syncToCloud(CONSTANT_NODE_ID, state);
@@ -135,40 +131,30 @@ const App: React.FC = () => {
   const triggerPull = useCallback(async () => {
     setCloudStatus('PULLING');
     setIsSyncing(true);
-    
     const cloudData = await fetchFromCloud(CONSTANT_NODE_ID);
-    
     if (cloudData && cloudData.state) {
       isInternalUpdate.current = true;
       const { state } = cloudData;
-      
       if (state.institutes) setInstitutes(state.institutes);
       if (state.departments) setDepartments(state.departments);
       if (state.users) setUsers(state.users);
       if (state.exams) setExams(state.exams);
       if (state.submissions) setSubmissions(state.submissions);
       if (state.gradingResults) setGradingResults(state.gradingResults);
-      
-      notify("Global Database Link Established", "success");
+      notify("Cloud Connection Verified", "success");
       setTimeout(() => { isInternalUpdate.current = false; }, 1000);
     } else {
-      notify("Node Initialized - Empty State Detected", "info");
+      notify("Local Node Active", "info");
     }
-    
     hasInitialPullCompleted.current = true;
     setCloudStatus('READY');
     setIsSyncing(false);
   }, [notify]);
 
-  // Handle Handshake on Component Mount
-  useEffect(() => {
-    triggerPull();
-  }, [triggerPull]);
+  useEffect(() => { triggerPull(); }, [triggerPull]);
 
-  // Local Persistence + Debounced Cloud Push
   useEffect(() => {
     if (!hasInitialPullCompleted.current) return;
-
     localStorage.setItem(STORAGE_KEYS.INSTITUTES, JSON.stringify(institutes));
     localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(departments));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
@@ -176,17 +162,11 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(submissions));
     localStorage.setItem(STORAGE_KEYS.RESULTS, JSON.stringify(gradingResults));
     localStorage.setItem(STORAGE_KEYS.THEME, appTheme);
-    
     if (portal) localStorage.setItem(STORAGE_KEYS.PORTAL, portal);
     else localStorage.removeItem(STORAGE_KEYS.PORTAL);
-
     if (activeUser) localStorage.setItem(STORAGE_KEYS.ACTIVE_USER, JSON.stringify(activeUser));
     else localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
-    
-    const timer = setTimeout(() => {
-      triggerPush();
-    }, 2500); // 2.5s debounce for mobile stability
-    
+    const timer = setTimeout(() => { triggerPush(); }, 3000);
     return () => clearTimeout(timer);
   }, [institutes, departments, users, exams, submissions, gradingResults, appTheme, portal, activeUser, triggerPush]);
 
@@ -194,7 +174,7 @@ const App: React.FC = () => {
     if (role === UserRole.ADMIN) {
       if (email.toLowerCase() === CENTRAL_ADMIN_EMAIL.toLowerCase() && password === CENTRAL_ADMIN_PASSWORD) {
          setActiveUser({ id: 'admin-001', name: 'Central Admin', email: CENTRAL_ADMIN_EMAIL, role: UserRole.ADMIN, isApproved: true });
-         notify("Admin Access Granted", "success"); return;
+         notify("Secure Access Granted", "success"); return;
       }
       notify("Invalid Credentials", "error"); return;
     }
@@ -203,7 +183,7 @@ const App: React.FC = () => {
       notify("Authentication Failed", "error"); return;
     }
     if (role === UserRole.EXAMINER && !user.isApproved) {
-      notify("Faculty Pending Verification", "info"); return;
+      notify("Verification Pending", "info"); return;
     }
     setActiveUser(user);
     notify(`Identity Verified: ${user.name}`, "success");
@@ -212,17 +192,16 @@ const App: React.FC = () => {
   const handleSignUp = (data: any) => {
     const newUser = { ...data, id: `u-${Date.now()}`, isApproved: data.role === UserRole.STUDENT };
     setUsers(prev => [...prev, newUser]);
-    notify("Registration Complete", "success");
+    notify("Registration Received", "success");
   };
 
   const handleLogout = () => { 
-    // Atomic clear for instant logout persistence
-    localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
-    localStorage.removeItem(STORAGE_KEYS.PORTAL);
+    Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
     setActiveUser(null); 
     setPortal(null); 
     setIsExamActive(false); 
-    notify("Session Terminated", "info"); 
+    notify("Identity Decoupled", "info");
+    setTimeout(() => { window.location.reload(); }, 300);
   };
   
   const handleExitPortal = () => { 
@@ -259,12 +238,9 @@ const App: React.FC = () => {
              <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-xl border-2 border-slate-200 shadow-sm">
                <div className={`w-2 h-2 rounded-full ${cloudStatus === 'READY' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400 animate-spin'}`}></div>
                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-                 {cloudStatus === 'READY' ? `Live Node: ${CONSTANT_NODE_ID}` : 'Handshaking...'}
+                 {cloudStatus === 'READY' ? `Node Active: ${CONSTANT_NODE_ID}` : 'Handshaking Cloud...'}
                </span>
              </div>
-             {cloudStatus === 'READY' && (
-               <button onClick={triggerPull} className="text-[8px] font-black uppercase tracking-widest text-indigo-500 hover:underline">Refresh Cloud Data</button>
-             )}
           </div>
           <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div className="md:col-span-3 mb-12">
@@ -292,7 +268,7 @@ const App: React.FC = () => {
         <Layout role={activeUser.role} userName={activeUser.name} onRoleSwitch={handleLogout} appTheme={appTheme} onSetTheme={setAppTheme} onOpenSync={() => triggerPull()}>
           <div className="fixed bottom-6 right-6 z-[100] flex items-center space-x-2 bg-slate-900 text-white px-4 py-2 rounded-full shadow-2xl scale-75 md:scale-100 origin-bottom-right transition-all duration-300">
             <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-spin' : 'bg-emerald-400 animate-pulse'}`}></div>
-            <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Linking...' : 'Cloud Healthy'}</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Syncing...' : 'Network Stable'}</span>
           </div>
           {activeUser.role === UserRole.ADMIN && <AdminDashboard institutes={institutes} departments={departments} users={users} onAddDepartment={d => setDepartments([...departments, d])} onDeleteDepartment={id => setDepartments(prev => prev.filter(d => d.id !== id))} onApproveUser={id => setUsers(prev => prev.map(u => u.id === id ? { ...u, isApproved: true } : u))} onDeclineUser={id => setUsers(prev => prev.filter(u => u.id !== id))} onDeleteUser={id => setUsers(prev => prev.filter(u => u.id !== id))} />}
           {activeUser.role === UserRole.EXAMINER && <ExaminerDashboard examiner={activeUser} exams={exams.filter(e => e.examinerId === activeUser.id)} submissions={submissions.filter(s => exams.find(e => e.id === s.examId && e.examinerId === activeUser.id))} onGradeRequest={() => {}} onSaveExam={e => setExams([...exams, e])} onDeleteExam={id => setExams(prev => prev.filter(e => e.id !== id))} onPublishResult={id => setGradingResults(prev => prev.map(r => r.submissionId === id ? { ...r, isPublished: true } : r))} onSaveManualGrade={res => { setGradingResults(prev => [...prev.filter(r => r.submissionId !== res.submissionId), res]); setSubmissions(prev => prev.map(s => s.id === res.submissionId ? { ...s, status: 'GRADED' } : s)); }} results={gradingResults} />}
@@ -300,8 +276,8 @@ const App: React.FC = () => {
             <div className="max-w-4xl mx-auto py-10 space-y-12">
                <div className="text-center space-y-6">
                   <div className="bg-white h-32 w-32 rounded-[32px] mx-auto flex items-center justify-center shadow-2xl border-2 border-slate-200 p-4"><BrandingLogo className="w-full h-full" /></div>
-                  <h1 className="text-5xl font-black text-slate-900 uppercase">Welcome, <span className="text-emerald-600">{activeUser.name}</span></h1>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Link: {CONSTANT_NODE_ID}</p>
+                  <h1 className="text-5xl font-black text-slate-900 uppercase tracking-tighter">Welcome, <span className="text-emerald-600">{activeUser.name}</span></h1>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Identity: {CONSTANT_NODE_ID}</p>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
@@ -311,10 +287,10 @@ const App: React.FC = () => {
                          <p className="text-xl font-black text-slate-900 uppercase leading-tight">{studentExams[0].title}</p>
                          <button onClick={() => setIsExamActive(true)} className="w-full bg-emerald-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest text-[10px]">Enter Exam Hall</button>
                        </div>
-                     ) : <p className="text-slate-400 font-bold italic text-sm">No assessments pending.</p>}
+                     ) : <p className="text-slate-400 font-bold italic text-sm">No pending assessments.</p>}
                   </div>
                   <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
-                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Academic Results</h3>
+                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Academic Record</h3>
                      <div className="space-y-4">
                        {studentGrades.map(res => (
                          <div key={res.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
