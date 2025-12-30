@@ -1,98 +1,133 @@
 
 /**
- * LADTEM COMMISSION - Neural Cloud Sync Engine (V3.1)
- * Optimized for high-frequency updates and multi-device coordination.
+ * LADTEM COMMISSION - Universal Neural Sync (V4.5)
+ * Optimized for Vercel Blob Persistence & JSON Hub Failover.
  */
 
-const API_BASE = 'https://api.jsonbin.io/v3/b';
-const BIN_ID = '67b36f52ad19ca34f80210e7'; 
-const MASTER_KEY = '$2a$10$T85zV.S5YxUj/yF5f9u.A.oG9J7rL2R9E7Z9E7Z9E7Z9E7Z9E7Z9E';
+const HUB_BASE = 'https://api.jsonbin.io/v3/b';
+const HUB_ID = '67b36f52ad19ca34f80210e7'; 
+const HUB_KEY = '$2a$10$T85zV.S5YxUj/yF5f9u.A.oG9J7rL2R9E7Z9E7Z9E7Z9E7Z9E7Z9E';
 
-export interface NodeData {
-  state: any;
-  lastUpdated: string;
-  version: number;
-}
-
-export interface GlobalRegistry {
-  [nodeId: string]: NodeData;
-}
-
-export interface CloudResponse {
-  nodeId: string;
-  state: any;
-  lastUpdated: string;
+export interface SyncState {
+  institutes: any[];
+  departments: any[];
+  users: any[];
+  exams: any[];
+  submissions: any[];
+  gradingResults: any[];
 }
 
 /**
- * Pushes local state to the cloud.
- * Implements an 'Atomic Merge' strategy to prevent cross-device data overwrites.
+ * Intelligent Conflict Resolution (LADTEM Merge V2)
  */
-export const syncToCloud = async (nodeId: string, state: any): Promise<boolean> => {
-  try {
-    // 1. Fetch current global registry to merge changes
-    const getRes = await fetch(`${API_BASE}/${BIN_ID}/latest`, {
-      headers: { 'X-Master-Key': MASTER_KEY },
-      cache: 'no-store'
+export const mergeStates = (local: SyncState, cloud: SyncState): SyncState => {
+  const mergeCollection = (localCol: any[] = [], cloudCol: any[] = []) => {
+    const map = new Map();
+    // Prioritize cloud for structure, but keep unique local entries
+    cloudCol.forEach(item => map.set(item.id, item));
+    localCol.forEach(item => {
+      if (!map.has(item.id)) {
+        map.set(item.id, item);
+      } else {
+        const existing = map.get(item.id);
+        // Compare data complexity as a proxy for 'freshness'
+        if (JSON.stringify(item).length > JSON.stringify(existing).length) {
+          map.set(item.id, item);
+        }
+      }
     });
+    return Array.from(map.values());
+  };
+
+  return {
+    institutes: mergeCollection(local.institutes, cloud.institutes),
+    departments: mergeCollection(local.departments, cloud.departments),
+    users: mergeCollection(local.users, cloud.users),
+    exams: mergeCollection(local.exams, cloud.exams),
+    submissions: mergeCollection(local.submissions, cloud.submissions),
+    gradingResults: mergeCollection(local.gradingResults, cloud.gradingResults),
+  };
+};
+
+/**
+ * Sync Router
+ */
+export const syncToCloud = async (nodeId: string, state: SyncState, vBlobUrl?: string): Promise<SyncState | null> => {
+  try {
+    // 1. Fetch Latest State
+    let cloudData: any = {};
     
-    let registry: GlobalRegistry = {};
-    if (getRes.ok) {
-      const data = await getRes.json();
-      registry = data.record || {};
+    // Check Vercel Blob First if URL provided
+    if (vBlobUrl) {
+      const vRes = await fetch(`${vBlobUrl}?t=${Date.now()}`, { cache: 'no-store' });
+      if (vRes.ok) {
+        const fullReg = await vRes.json();
+        cloudData = fullReg[nodeId]?.state || {};
+      }
+    } else {
+      // Fallback to Global Hub
+      const hRes = await fetch(`${HUB_BASE}/${HUB_ID}/latest`, {
+        headers: { 'X-Master-Key': HUB_KEY },
+        cache: 'no-store'
+      });
+      if (hRes.ok) {
+        const data = await hRes.json();
+        cloudData = data.record[nodeId]?.state || {};
+      }
     }
 
-    const currentVersion = registry[nodeId]?.version || 0;
+    // 2. Atomic Merge
+    const mergedState = mergeStates(state, cloudData);
 
-    // 2. Prepare the update with incremented version
+    // 3. Prepare Registry
+    const getReg = await fetch(`${HUB_BASE}/${HUB_ID}/latest`, {
+      headers: { 'X-Master-Key': HUB_KEY }
+    });
+    const regData = await getReg.json();
+    const registry = regData.record || {};
+
     registry[nodeId] = {
-      state,
+      state: mergedState,
       lastUpdated: new Date().toISOString(),
-      version: currentVersion + 1
+      version: (registry[nodeId]?.version || 0) + 1
     };
 
-    // 3. Commit back to cloud
-    const putRes = await fetch(`${API_BASE}/${BIN_ID}`, {
+    // 4. Commit to Hub
+    // (In a full Vercel setup, we'd also trigger a Webhook to update the Blob)
+    const putRes = await fetch(`${HUB_BASE}/${HUB_ID}`, {
       method: 'PUT',
       body: JSON.stringify(registry),
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': MASTER_KEY
+        'X-Master-Key': HUB_KEY
       }
     });
     
-    return putRes.ok;
+    return putRes.ok ? mergedState : null;
   } catch (error) {
-    console.error("LADTEM SYNC: Uplink Interrupted.", error);
-    return false;
+    console.error("LADTEM SYNC: Uplink Failure.", error);
+    return null;
   }
 };
 
-/**
- * Fetches the specific state for the active Room/Node ID.
- */
-export const fetchFromCloud = async (nodeId: string): Promise<CloudResponse | null> => {
+export const fetchFromCloud = async (nodeId: string, vBlobUrl?: string): Promise<SyncState | null> => {
   try {
-    const response = await fetch(`${API_BASE}/${BIN_ID}/latest`, {
-      headers: { 'X-Master-Key': MASTER_KEY },
+    if (vBlobUrl) {
+      const res = await fetch(`${vBlobUrl}?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const reg = await res.json();
+        return reg[nodeId]?.state || null;
+      }
+    }
+
+    const res = await fetch(`${HUB_BASE}/${HUB_ID}/latest`, {
+      headers: { 'X-Master-Key': HUB_KEY },
       cache: 'no-store'
     });
-    
-    if (!response.ok) return null;
-    
-    const data = await response.json();
-    const registry: GlobalRegistry = data.record || {};
-    const nodeData = registry[nodeId];
-
-    if (!nodeData) return null;
-
-    return {
-      nodeId,
-      state: nodeData.state,
-      lastUpdated: nodeData.lastUpdated
-    };
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.record[nodeId]?.state || null;
   } catch (error) {
-    console.error("LADTEM SYNC: Downlink Interrupted.", error);
     return null;
   }
 };

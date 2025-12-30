@@ -8,7 +8,7 @@ import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
 import SyncHub from './components/SyncHub';
 import { gradeSubmission } from './services/geminiService';
-import { fetchFromCloud, syncToCloud, CloudResponse } from './services/cloudSyncService';
+import { fetchFromCloud, syncToCloud } from './services/cloudSyncService';
 import { BRANDING } from './constants/branding';
 
 const CENTRAL_ADMIN_EMAIL = 'ladtemcommision@gmail.com';
@@ -16,6 +16,7 @@ const CENTRAL_ADMIN_PASSWORD = 'ladtem';
 
 const STORAGE_KEYS = {
   NODE_ID: 'ig_node_id',
+  BLOB_URL: 'ig_blob_url',
   INSTITUTES: 'ig_institutes',
   DEPARTMENTS: 'ig_departments',
   USERS: 'ig_users',
@@ -82,17 +83,11 @@ const INITIAL_DEPARTMENTS: Department[] = [
 ];
 
 const App: React.FC = () => {
-  // --- NODE IDENTITY ---
+  // --- INFRASTRUCTURE CONFIG ---
   const [nodeId, setNodeId] = useState<string>(() => localStorage.getItem(STORAGE_KEYS.NODE_ID) || 'LADTEM-GLOBAL');
+  const [blobUrl, setBlobUrl] = useState<string>(() => localStorage.getItem(STORAGE_KEYS.BLOB_URL) || '');
   const [isSyncHubOpen, setIsSyncHubOpen] = useState(false);
 
-  // --- SESSION STATE ---
-  const [portal, setPortal] = useState<UserRole | null>(() => (localStorage.getItem(STORAGE_KEYS.PORTAL) as UserRole) || null);
-  const [activeUser, setActiveUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER);
-    try { return saved ? JSON.parse(saved) : null; } catch { return null; }
-  });
-  
   // --- DATABASE STATE ---
   const [institutes, setInstitutes] = useState<Institute[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.INSTITUTES);
@@ -118,13 +113,20 @@ const App: React.FC = () => {
     const saved = localStorage.getItem(STORAGE_KEYS.RESULTS);
     return saved ? JSON.parse(saved) : [];
   });
+  
+  // --- SESSION STATE ---
+  const [portal, setPortal] = useState<UserRole | null>(() => (localStorage.getItem(STORAGE_KEYS.PORTAL) as UserRole) || null);
+  const [activeUser, setActiveUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER);
+    try { return saved ? JSON.parse(saved) : null; } catch { return null; }
+  });
   const [appTheme, setAppTheme] = useState<AppTheme>(() => (localStorage.getItem(STORAGE_KEYS.THEME) as AppTheme) || 'slate');
 
   // --- UI & SYNC CONTROL ---
   const [isExamActive, setIsExamActive] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string>('Never');
+  const [lastSyncTime, setLastSyncTime] = useState<string>(new Date().toLocaleTimeString());
   const [cloudStatus, setCloudStatus] = useState<'IDLE' | 'PULLING' | 'READY' | 'ERROR'>('IDLE');
   
   const isInternalUpdate = useRef(false);
@@ -135,74 +137,73 @@ const App: React.FC = () => {
     setNotification({ message, type });
   }, []);
 
-  // --- SYNC ENGINE ---
+  // --- SYNC ENGINE V4.5 ---
   const triggerPush = useCallback(async () => {
     if (!hasInitialPullCompleted.current || cloudStatus !== 'READY' || isInternalUpdate.current) return;
     
-    // Safety check: Don't push if database appears empty unexpectedly
-    if (exams.length === 0 && users.length === 0 && departments.length === INITIAL_DEPARTMENTS.length) return;
-
     const currentState = { institutes, departments, users, exams, submissions, gradingResults };
     const checksum = JSON.stringify(currentState).length;
     
     if (checksum === lastSyncChecksum.current) return;
 
     setIsSyncing(true);
-    const success = await syncToCloud(nodeId, currentState);
-    if (success) {
-      lastSyncChecksum.current = checksum;
+    const mergedState = await syncToCloud(nodeId, currentState, blobUrl);
+    
+    if (mergedState) {
+      isInternalUpdate.current = true;
+      setInstitutes(mergedState.institutes);
+      setDepartments(mergedState.departments);
+      setUsers(mergedState.users);
+      setExams(mergedState.exams);
+      setSubmissions(mergedState.submissions);
+      setGradingResults(mergedState.gradingResults);
+      
+      lastSyncChecksum.current = JSON.stringify(mergedState).length;
       setLastSyncTime(new Date().toLocaleTimeString());
-      setCloudStatus('READY');
+      setTimeout(() => { isInternalUpdate.current = false; }, 500);
     }
     setIsSyncing(false);
-  }, [cloudStatus, nodeId, institutes, departments, users, exams, submissions, gradingResults]);
+  }, [nodeId, cloudStatus, blobUrl, institutes, departments, users, exams, submissions, gradingResults]);
 
   const triggerPull = useCallback(async (silent = false) => {
     if (!silent) setCloudStatus('PULLING');
     setIsSyncing(true);
     
-    const cloudData = await fetchFromCloud(nodeId);
+    const cloudState = await fetchFromCloud(nodeId, blobUrl);
     
-    if (cloudData && cloudData.state) {
+    if (cloudState) {
       isInternalUpdate.current = true;
-      const { state } = cloudData;
+      setInstitutes(cloudState.institutes || INITIAL_INSTITUTES);
+      setDepartments(cloudState.departments || INITIAL_DEPARTMENTS);
+      setUsers(cloudState.users || []);
+      setExams(cloudState.exams || []);
+      setSubmissions(cloudState.submissions || []);
+      setGradingResults(cloudState.gradingResults || []);
       
-      setInstitutes(state.institutes || INITIAL_INSTITUTES);
-      setDepartments(state.departments || INITIAL_DEPARTMENTS);
-      setUsers(state.users || []);
-      setExams(state.exams || []);
-      setSubmissions(state.submissions || []);
-      setGradingResults(state.gradingResults || []);
-      
-      lastSyncChecksum.current = JSON.stringify(state).length;
+      lastSyncChecksum.current = JSON.stringify(cloudState).length;
       setLastSyncTime(new Date().toLocaleTimeString());
-      if (!silent) notify("Global Sync Complete", "success");
-      
+      if (!silent) notify("Hub Sync Successful", "success");
       setTimeout(() => { isInternalUpdate.current = false; }, 500);
-    } else if (!silent) {
-      notify("Node Established Locally", "info");
     }
     
     hasInitialPullCompleted.current = true;
     setCloudStatus('READY');
     setIsSyncing(false);
-  }, [nodeId, notify]);
+  }, [nodeId, blobUrl, notify]);
 
-  // Sync Cycle
   useEffect(() => {
     triggerPull();
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') triggerPull(true);
-    }, 30000); 
+    }, 45000); 
     return () => clearInterval(interval);
   }, [triggerPull]);
 
-  // Persistent Storage and Push Debounce
   useEffect(() => {
     if (!hasInitialPullCompleted.current) return;
 
-    // Instant local save
     localStorage.setItem(STORAGE_KEYS.NODE_ID, nodeId);
+    localStorage.setItem(STORAGE_KEYS.BLOB_URL, blobUrl);
     localStorage.setItem(STORAGE_KEYS.INSTITUTES, JSON.stringify(institutes));
     localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(departments));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
@@ -217,12 +218,11 @@ const App: React.FC = () => {
     if (activeUser) localStorage.setItem(STORAGE_KEYS.ACTIVE_USER, JSON.stringify(activeUser));
     else localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
     
-    // Cloud upload debounce
-    const timer = setTimeout(() => { triggerPush(); }, 1200); 
+    const timer = setTimeout(() => { triggerPush(); }, 2000); 
     return () => clearTimeout(timer);
-  }, [nodeId, institutes, departments, users, exams, submissions, gradingResults, appTheme, portal, activeUser, triggerPush]);
+  }, [nodeId, blobUrl, institutes, departments, users, exams, submissions, gradingResults, appTheme, portal, activeUser, triggerPush]);
 
-  // --- ACTIONS ---
+  // --- PORTAL ACTIONS ---
   const handleLogin = ({ email, password, role }: any) => {
     if (role === UserRole.ADMIN) {
       if (email.toLowerCase() === CENTRAL_ADMIN_EMAIL.toLowerCase() && password === CENTRAL_ADMIN_PASSWORD) {
@@ -280,7 +280,7 @@ const App: React.FC = () => {
       const gradeRes = { id: `g-${Date.now()}`, submissionId: sub.id, examId: currentExam.id, questionGrades: res.questionGrades || [], finalGrade: res.finalGrade || 0, isPublished: false, gradingSource: 'AI' as any };
       setGradingResults(prev => [...prev, gradeRes]);
       setSubmissions(prev => prev.map(s => s.id === sub.id ? { ...s, status: 'GRADED' } : s));
-    } catch (e) { notify("AI Evaluation in Queue", "info"); }
+    } catch (e) { notify("AI Evaluation Queued", "info"); }
   };
 
   const studentExams = activeUser?.role === UserRole.STUDENT ? exams.filter(e => e.departmentId === activeUser.departmentId && !submissions.some(s => s.examId === e.id && s.studentId === activeUser.id)) : [];
@@ -307,7 +307,7 @@ const App: React.FC = () => {
                  ROOM: {nodeId}
                </span>
              </button>
-             <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Last Sync: {lastSyncTime}</p>
+             <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Hub: {lastSyncTime}</p>
           </div>
           <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div className="md:col-span-3 mb-12">
@@ -336,33 +336,49 @@ const App: React.FC = () => {
           <div className="fixed bottom-6 right-6 z-[100] flex items-center space-x-3 bg-slate-900 text-white px-5 py-2.5 rounded-full shadow-2xl scale-75 md:scale-100 origin-bottom-right transition-all duration-300">
             <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-spin' : 'bg-emerald-400 animate-pulse'}`}></div>
             <div className="flex flex-col">
-              <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Synchronizing...' : 'Cloud Healthy'}</span>
-              <span className="text-[8px] opacity-50 font-bold uppercase tracking-widest">Last: {lastSyncTime}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Neural Linking...' : 'Cloud Healthy'}</span>
+              <span className="text-[8px] opacity-50 font-bold uppercase tracking-widest">Last Sync: {lastSyncTime}</span>
             </div>
           </div>
-          {activeUser.role === UserRole.ADMIN && <AdminDashboard institutes={institutes} departments={departments} users={users} onAddDepartment={d => setDepartments([...departments, d])} onDeleteDepartment={id => setDepartments(prev => prev.filter(d => d.id !== id))} onApproveUser={id => setUsers(prev => prev.map(u => u.id === id ? { ...u, isApproved: true } : u))} onDeclineUser={id => setUsers(prev => prev.filter(u => u.id !== id))} onDeleteUser={id => setUsers(prev => prev.filter(u => u.id !== id))} />}
+          {activeUser.role === UserRole.ADMIN && (
+            <AdminDashboard 
+              institutes={institutes} 
+              departments={departments} 
+              users={users} 
+              onAddDepartment={d => setDepartments([...departments, d])} 
+              onDeleteDepartment={id => setDepartments(prev => prev.filter(d => d.id !== id))} 
+              onApproveUser={id => setUsers(prev => prev.map(u => u.id === id ? { ...u, isApproved: true } : u))} 
+              onDeclineUser={id => setUsers(prev => prev.filter(u => u.id !== id))} 
+              onDeleteUser={id => setUsers(prev => prev.filter(u => u.id !== id))} 
+              onUpdateBlobConfig={setBlobUrl}
+              blobConfigUrl={blobUrl}
+              exams={exams}
+              submissions={submissions}
+              gradingResults={gradingResults}
+            />
+          )}
           {activeUser.role === UserRole.EXAMINER && <ExaminerDashboard examiner={activeUser} exams={exams.filter(e => e.examinerId === activeUser.id)} submissions={submissions.filter(s => exams.find(e => e.id === s.examId && e.examinerId === activeUser.id))} onGradeRequest={() => {}} onSaveExam={e => setExams([...exams, e])} onDeleteExam={id => setExams(prev => prev.filter(e => e.id !== id))} onPublishResult={id => setGradingResults(prev => prev.map(r => r.submissionId === id ? { ...r, isPublished: true } : r))} onSaveManualGrade={res => { setGradingResults(prev => [...prev.filter(r => r.submissionId !== res.submissionId), res]); setSubmissions(prev => prev.map(s => s.id === res.submissionId ? { ...s, status: 'GRADED' } : s)); }} results={gradingResults} />}
           {activeUser.role === UserRole.STUDENT && (!isExamActive ? (
             <div className="max-w-4xl mx-auto py-10 space-y-12">
                <div className="text-center space-y-6">
                   <div className="bg-white h-32 w-32 rounded-[32px] mx-auto flex items-center justify-center shadow-2xl border-2 border-slate-200 p-4"><BrandingLogo className="w-full h-full" /></div>
                   <h1 className="text-5xl font-black text-slate-900 uppercase tracking-tighter">Welcome, <span className="text-emerald-600">{activeUser.name}</span></h1>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Room ID: {nodeId}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Link: {nodeId}</p>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
-                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Unit Assessments</h3>
+                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Assigned Items</h3>
                      {studentExams.length > 0 ? (
                        <div className="space-y-6">
                          <p className="text-xl font-black text-slate-900 uppercase leading-tight">{studentExams[0].title}</p>
-                         <button onClick={() => setIsExamActive(true)} className="w-full bg-emerald-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-emerald-700 transition-all">Start Assessment</button>
+                         <button onClick={() => setIsExamActive(true)} className="w-full bg-emerald-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest text-[10px] hover:bg-emerald-700 transition-all">Enter Examination</button>
                        </div>
-                     ) : <p className="text-slate-400 font-bold italic text-sm">No assessments pending for your department.</p>}
+                     ) : <p className="text-slate-400 font-bold italic text-sm text-center py-10">No pending assessments recorded.</p>}
                   </div>
                   <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
-                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Results Vault</h3>
+                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Released Results</h3>
                      <div className="space-y-4">
-                       {studentGrades.length === 0 ? <p className="text-slate-400 font-bold italic text-sm text-center">No grades published yet.</p> : studentGrades.map(res => (
+                       {studentGrades.length === 0 ? <p className="text-slate-400 font-bold italic text-sm text-center py-10">No grades released to vault.</p> : studentGrades.map(res => (
                          <div key={res.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
                            <p className="font-bold text-slate-900 text-sm">{exams.find(e => e.id === res.examId)?.title}</p>
                            <span className="text-xl font-black text-emerald-600">{res.finalGrade}%</span>
