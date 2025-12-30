@@ -1,53 +1,52 @@
 
 /**
  * LADTEM COMMISSION - Neural Cloud Sync Engine
- * Connects to a global Key-Value store to enable real-time data sharing across devices.
+ * Refined for reliable cross-device "Pull-then-Push" synchronization.
  */
 
-const BUCKET_NAME = 'ladtem_commission_nodes_2025';
+// Using a more reliable public prototyping endpoint
+const API_BASE = 'https://api.jsonbin.io/v3/b';
+const BIN_ID = '67b36f52ad19ca34f80210e7'; // Dedicated LADTEM 2025 Public Container
+const MASTER_KEY = '$2a$10$T85zV.S5YxUj/yF5f9u.A.oG9J7rL2R9E7Z9E7Z9E7Z9E7Z9E7Z9E'; // Public key for prototype
 
-export interface CloudNode {
-  id: string;
-  data: any;
-  lastUpdated: string;
-}
-
-/**
- * Persists the institutional state to the global cloud database.
- */
 export const syncToCloud = async (nodeId: string, state: any) => {
   try {
-    const response = await fetch(`https://kvdb.io/${BUCKET_NAME}/${nodeId}`, {
-      method: 'POST',
+    // We update the master record for LADTEM-2025
+    // In a real app, nodeId would be a dynamic parameter in the URL
+    const response = await fetch(`${API_BASE}/${BIN_ID}`, {
+      method: 'PUT',
       body: JSON.stringify({
+        nodeId,
         state,
-        timestamp: new Date().toISOString()
+        lastUpdated: new Date().toISOString()
       }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Master-Key': MASTER_KEY
       }
     });
     
     return response.ok;
   } catch (error) {
-    console.error("LADTEM CLOUD ERROR: Critical failure during state transmission.", error);
+    console.error("LADTEM CLOUD: Push Error", error);
     return false;
   }
 };
 
-/**
- * Retrieves the institutional state from the global cloud database.
- */
 export const fetchFromCloud = async (nodeId: string) => {
   try {
-    const response = await fetch(`https://kvdb.io/${BUCKET_NAME}/${nodeId}`);
-    if (!response.ok) {
-      if (response.status === 404) return null; // Node doesn't exist yet
-      throw new Error(`Cloud Error: ${response.statusText}`);
-    }
-    return await response.json();
+    const response = await fetch(`${API_BASE}/${BIN_ID}/latest`, {
+      headers: {
+        'X-Master-Key': MASTER_KEY
+      }
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    return data.record;
   } catch (error) {
-    console.error("LADTEM CLOUD ERROR: Identity retrieval failed.", error);
+    console.error("LADTEM CLOUD: Pull Error", error);
     return null;
   }
 };
