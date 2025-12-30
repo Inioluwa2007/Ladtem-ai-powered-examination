@@ -106,4 +106,5 @@ export interface GradingResult {
   finalGrade: number;
   isPublished: boolean;
   reviewedBy?: string;
+  gradingSource: 'AI' | 'MANUAL';
 }

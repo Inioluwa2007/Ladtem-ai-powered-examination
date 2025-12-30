@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserRole, Exam, Submission, GradingResult, Answer, User, Department, Institute } from './types';
 import Layout from './components/Layout';
@@ -11,6 +10,19 @@ import { BRANDING } from './constants/branding';
 
 const CENTRAL_ADMIN_EMAIL = 'ladtemcommision@gmail.com';
 const CENTRAL_ADMIN_PASSWORD = 'ladtem';
+
+// Storage Keys
+const STORAGE_KEYS = {
+  INSTITUTES: 'ig_institutes',
+  DEPARTMENTS: 'ig_departments',
+  USERS: 'ig_users',
+  EXAMS: 'ig_exams',
+  SUBMISSIONS: 'ig_submissions',
+  RESULTS: 'ig_results',
+  ACTIVE_USER: 'ig_active_user',
+  PORTAL: 'ig_active_portal',
+  THEME: 'ig_theme'
+};
 
 export type AppTheme = 'slate' | 'blue' | 'emerald' | 'rose';
 
@@ -66,17 +78,62 @@ const INITIAL_INSTITUTES: Institute[] = [
 ];
 
 const App: React.FC = () => {
-  const [portal, setPortal] = useState<UserRole | null>(null);
-  const [activeUser, setActiveUser] = useState<User | null>(null);
-  const [institutes, setInstitutes] = useState<Institute[]>(INITIAL_INSTITUTES);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [exams, setExams] = useState<Exam[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [gradingResults, setGradingResults] = useState<GradingResult[]>([]);
+  // --- STATE INITIALIZATION WITH PERSISTENCE ---
+  const [portal, setPortal] = useState<UserRole | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PORTAL);
+    return saved ? (saved as UserRole) : null;
+  });
+  const [activeUser, setActiveUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER);
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [institutes, setInstitutes] = useState<Institute[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.INSTITUTES);
+    return saved ? JSON.parse(saved) : INITIAL_INSTITUTES;
+  });
+  const [departments, setDepartments] = useState<Department[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.DEPARTMENTS);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.USERS);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [exams, setExams] = useState<Exam[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.EXAMS);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [submissions, setSubmissions] = useState<Submission[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [gradingResults, setGradingResults] = useState<GradingResult[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.RESULTS);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [appTheme, setAppTheme] = useState<AppTheme>(() => {
+    return (localStorage.getItem(STORAGE_KEYS.THEME) as AppTheme) || 'slate';
+  });
+
   const [isExamActive, setIsExamActive] = useState(false);
-  const [appTheme, setAppTheme] = useState<AppTheme>('slate');
   const [notification, setNotification] = useState<NotificationState | null>(null);
+
+  // --- PERSISTENCE SYNCING ---
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.INSTITUTES, JSON.stringify(institutes)), [institutes]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(departments)), [departments]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users)), [users]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.EXAMS, JSON.stringify(exams)), [exams]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(submissions)), [submissions]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.RESULTS, JSON.stringify(gradingResults)), [gradingResults]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.THEME, appTheme), [appTheme]);
+  useEffect(() => {
+    if (portal) localStorage.setItem(STORAGE_KEYS.PORTAL, portal);
+    else localStorage.removeItem(STORAGE_KEYS.PORTAL);
+  }, [portal]);
+  useEffect(() => {
+    if (activeUser) localStorage.setItem(STORAGE_KEYS.ACTIVE_USER, JSON.stringify(activeUser));
+    else localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
+  }, [activeUser]);
 
   const notify = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ message, type });
@@ -164,12 +221,29 @@ const App: React.FC = () => {
 
     try {
       const result = await gradeSubmission(exam, newSubmission);
-      const gradingResult: GradingResult = { ...result, isPublished: false };
+      const gradingResult: GradingResult = { 
+        id: result.id || `grade-ai-${Date.now()}`,
+        submissionId: result.submissionId || newSubmission.id,
+        examId: result.examId || exam.id,
+        questionGrades: result.questionGrades || [],
+        finalGrade: result.finalGrade || 0,
+        isPublished: false, 
+        gradingSource: 'AI' 
+      };
       setGradingResults(prev => [...prev, gradingResult]);
       setSubmissions(prev => prev.map(s => s.id === newSubmission.id ? { ...s, status: 'GRADED' } : s));
     } catch (e) {
       notify("AI evaluation failed, examiner will grade manually.", "error");
     }
+  };
+
+  const handleSaveManualGrade = (result: GradingResult) => {
+    setGradingResults(prev => {
+      const filtered = prev.filter(r => r.submissionId !== result.submissionId);
+      return [...filtered, result];
+    });
+    setSubmissions(prev => prev.map(s => s.id === result.submissionId ? { ...s, status: 'GRADED' } : s));
+    notify("Manual assessment committed to registry.", "success");
   };
 
   const handlePublishResult = (submissionId: string) => {
@@ -206,7 +280,7 @@ const App: React.FC = () => {
   return (
     <>
       {notification && <Notification notification={notification} onClose={() => setNotification(null)} />}
-      {!portal ? (
+      {!portal && !activeUser ? (
         <div className={`min-h-screen flex items-center justify-center p-6 transition-colors duration-500 ${bgClasses[appTheme]}`}>
           <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div className="md:col-span-3 mb-12">
@@ -243,7 +317,7 @@ const App: React.FC = () => {
         </div>
       ) : !activeUser ? (
         <Login 
-          portalType={portal} 
+          portalType={portal!} 
           institutes={institutes}
           departments={departments} 
           users={users}
@@ -283,6 +357,7 @@ const App: React.FC = () => {
               onSaveExam={(e) => { setExams([...exams, e]); notify("Examination Published", "success"); }}
               onDeleteExam={handleDeleteExam}
               onPublishResult={handlePublishResult}
+              onSaveManualGrade={handleSaveManualGrade}
               results={gradingResults}
             />
           )}

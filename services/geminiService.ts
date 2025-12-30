@@ -8,13 +8,13 @@ import { Exam, Submission, GradingResult, QuestionType } from "../types";
  */
 const getAIClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("LADTEM SECURITY ALERT: API_KEY environment variable is missing. Deployment may be incomplete.");
+  if (!apiKey || apiKey === 'undefined') {
+    throw new Error("LADTEM SECURITY CRITICAL: API_KEY is missing. Ensure the 'API_KEY' environment variable is set in Vercel.");
   }
-  return new GoogleGenAI({ apiKey: apiKey || '' });
+  return new GoogleGenAI({ apiKey });
 };
 
-export const gradeSubmission = async (exam: Exam, submission: Submission): Promise<GradingResult> => {
+export const gradeSubmission = async (exam: Exam, submission: Submission): Promise<Partial<GradingResult>> => {
   const ai = getAIClient();
   const model = 'gemini-3-pro-preview';
   
@@ -109,10 +109,7 @@ export const gradeSubmission = async (exam: Exam, submission: Submission): Promi
   const resultData = JSON.parse(rawText);
 
   return {
-    id: `grade-${Date.now()}`,
-    submissionId: submission.id,
-    examId: exam.id,
-    isPublished: false,
-    ...resultData
+    ...resultData,
+    gradingSource: 'AI'
   };
 };

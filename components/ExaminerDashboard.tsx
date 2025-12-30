@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Exam, Submission, GradingResult, User } from '../types';
 import Analytics from './Analytics';
 import ExamCreator from './ExamCreator';
+import ManualGradingTerminal from './ManualGradingTerminal';
 
 interface ExaminerDashboardProps {
   examiner: User;
@@ -12,12 +13,14 @@ interface ExaminerDashboardProps {
   onSaveExam: (exam: Exam) => void;
   onDeleteExam: (examId: string) => void;
   onPublishResult: (submissionId: string) => void;
+  onSaveManualGrade: (result: GradingResult) => void;
   results: GradingResult[];
 }
 
-const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, submissions, onSaveExam, onDeleteExam, onPublishResult, results }) => {
+const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, submissions, onSaveExam, onDeleteExam, onPublishResult, onSaveManualGrade, results }) => {
   const [activeTab, setActiveTab] = useState<'submissions' | 'analytics' | 'exams'>('submissions');
   const [isCreating, setIsCreating] = useState(false);
+  const [gradingSubmission, setGradingSubmission] = useState<{exam: Exam, sub: Submission} | null>(null);
 
   if (isCreating) {
     return (
@@ -25,6 +28,20 @@ const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, 
         examiner={examiner}
         onSave={(exam) => { onSaveExam(exam); setIsCreating(false); setActiveTab('exams'); }}
         onCancel={() => setIsCreating(false)}
+      />
+    );
+  }
+
+  if (gradingSubmission) {
+    return (
+      <ManualGradingTerminal 
+        exam={gradingSubmission.exam}
+        submission={gradingSubmission.sub}
+        onSave={(res) => {
+          onSaveManualGrade(res);
+          setGradingSubmission(null);
+        }}
+        onCancel={() => setGradingSubmission(null)}
       />
     );
   }
@@ -52,7 +69,7 @@ const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, 
                   <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Student</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Exam</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Grading Status</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Visibility</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y-2 divide-slate-100">
@@ -84,9 +101,14 @@ const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, 
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-2">
                              {result ? (
-                               <span className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-md">
-                                 Grade: {result.finalGrade}%
-                               </span>
+                               <div className="flex flex-col space-y-1">
+                                 <span className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-md">
+                                   Grade: {result.finalGrade}%
+                                 </span>
+                                 <span className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">
+                                   Source: {result.gradingSource || 'AI'}
+                                 </span>
+                               </div>
                              ) : (
                                <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest animate-pulse">
                                  AI Evaluating...
@@ -101,23 +123,28 @@ const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, 
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {result ? (
-                            result.isPublished ? (
-                              <div className="flex items-center justify-end space-x-2 text-emerald-600">
+                          <div className="flex flex-col items-end space-y-2">
+                            {result && !result.isPublished && (
+                              <button 
+                                onClick={() => onPublishResult(sub.id)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-100 w-32"
+                              >
+                                Release Grade
+                              </button>
+                            )}
+                            {result?.isPublished && (
+                              <div className="flex items-center space-x-2 text-emerald-600 px-4 py-2">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                 <span className="text-[10px] font-black uppercase tracking-widest">Released</span>
                               </div>
-                            ) : (
-                              <button 
-                                onClick={() => onPublishResult(sub.id)}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-100"
-                              >
-                                Release
-                              </button>
-                            )
-                          ) : (
-                            <span className="text-[10px] font-bold text-slate-300 uppercase italic">Awaiting AI</span>
-                          )}
+                            )}
+                            <button 
+                              onClick={() => exam && setGradingSubmission({exam, sub})}
+                              className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg w-32"
+                            >
+                              {result ? 'Edit Manual' : 'Grade Manually'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
