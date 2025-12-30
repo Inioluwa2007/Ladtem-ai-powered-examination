@@ -13,14 +13,11 @@ export default defineConfig({
     outDir: 'dist',
     minify: 'esbuild',
     reportCompressedSize: false,
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          charts: ['recharts'],
-          genai: ['@google/genai']
-        }
+        // Reduced manual chunks for faster build cycles
+        manualChunks: undefined 
       }
     }
   }
