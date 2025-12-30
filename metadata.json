@@ -1,0 +1,7 @@
+{
+  "name": "LADTEM COMMISSION",
+  "description": "An AI powered Examination Platform powered by Gemini AI, featuring examiner dashboards, secure student interfaces, and automated rubric-based feedback.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
