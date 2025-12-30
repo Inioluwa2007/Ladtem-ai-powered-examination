@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { UserRole, Exam, Submission, GradingResult, Answer, User, Department, Institute } from './types';
 import Layout from './components/Layout';
@@ -115,13 +114,14 @@ const App: React.FC = () => {
   
   const isInternalUpdate = useRef(false);
   const hasInitialPullCompleted = useRef(false);
+  const isLoggingOut = useRef(false);
 
   const notify = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ message, type });
   }, []);
 
   const triggerPush = useCallback(async () => {
-    if (!hasInitialPullCompleted.current || cloudStatus !== 'READY' || isInternalUpdate.current) return;
+    if (!hasInitialPullCompleted.current || cloudStatus !== 'READY' || isInternalUpdate.current || isLoggingOut.current) return;
     setIsSyncing(true);
     const state = { institutes, departments, users, exams, submissions, gradingResults };
     await syncToCloud(CONSTANT_NODE_ID, state);
@@ -141,7 +141,7 @@ const App: React.FC = () => {
       if (state.exams) setExams(state.exams);
       if (state.submissions) setSubmissions(state.submissions);
       if (state.gradingResults) setGradingResults(state.gradingResults);
-      notify("Cloud Connection Verified", "success");
+      notify("Database Connection Established", "success");
       setTimeout(() => { isInternalUpdate.current = false; }, 1000);
     } else {
       notify("Local Node Active", "info");
@@ -151,10 +151,13 @@ const App: React.FC = () => {
     setIsSyncing(false);
   }, [notify]);
 
-  useEffect(() => { triggerPull(); }, [triggerPull]);
+  useEffect(() => { 
+    triggerPull(); 
+  }, [triggerPull]);
 
   useEffect(() => {
-    if (!hasInitialPullCompleted.current) return;
+    if (!hasInitialPullCompleted.current || isLoggingOut.current) return;
+    
     localStorage.setItem(STORAGE_KEYS.INSTITUTES, JSON.stringify(institutes));
     localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(departments));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
@@ -162,10 +165,13 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.SUBMISSIONS, JSON.stringify(submissions));
     localStorage.setItem(STORAGE_KEYS.RESULTS, JSON.stringify(gradingResults));
     localStorage.setItem(STORAGE_KEYS.THEME, appTheme);
+    
     if (portal) localStorage.setItem(STORAGE_KEYS.PORTAL, portal);
     else localStorage.removeItem(STORAGE_KEYS.PORTAL);
+
     if (activeUser) localStorage.setItem(STORAGE_KEYS.ACTIVE_USER, JSON.stringify(activeUser));
     else localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
+    
     const timer = setTimeout(() => { triggerPush(); }, 3000);
     return () => clearTimeout(timer);
   }, [institutes, departments, users, exams, submissions, gradingResults, appTheme, portal, activeUser, triggerPush]);
@@ -196,12 +202,19 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => { 
+    isLoggingOut.current = true;
+    // Wipe all local keys immediately
     Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+    // Reset state
     setActiveUser(null); 
     setPortal(null); 
     setIsExamActive(false); 
-    notify("Identity Decoupled", "info");
-    setTimeout(() => { window.location.reload(); }, 300);
+    notify("Session Terminated", "info");
+    // Force a fresh reload after state has been cleared to prevent ghosting
+    setTimeout(() => { 
+      isLoggingOut.current = false;
+      window.location.reload(); 
+    }, 500);
   };
   
   const handleExitPortal = () => { 
@@ -238,7 +251,7 @@ const App: React.FC = () => {
              <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-xl border-2 border-slate-200 shadow-sm">
                <div className={`w-2 h-2 rounded-full ${cloudStatus === 'READY' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400 animate-spin'}`}></div>
                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-                 {cloudStatus === 'READY' ? `Node Active: ${CONSTANT_NODE_ID}` : 'Handshaking Cloud...'}
+                 {cloudStatus === 'READY' ? `Node Active: ${CONSTANT_NODE_ID}` : 'Connecting Cloud...'}
                </span>
              </div>
           </div>
@@ -271,7 +284,7 @@ const App: React.FC = () => {
             <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Syncing...' : 'Network Stable'}</span>
           </div>
           {activeUser.role === UserRole.ADMIN && <AdminDashboard institutes={institutes} departments={departments} users={users} onAddDepartment={d => setDepartments([...departments, d])} onDeleteDepartment={id => setDepartments(prev => prev.filter(d => d.id !== id))} onApproveUser={id => setUsers(prev => prev.map(u => u.id === id ? { ...u, isApproved: true } : u))} onDeclineUser={id => setUsers(prev => prev.filter(u => u.id !== id))} onDeleteUser={id => setUsers(prev => prev.filter(u => u.id !== id))} />}
-          {activeUser.role === UserRole.EXAMINER && <ExaminerDashboard examiner={activeUser} exams={exams.filter(e => e.examinerId === activeUser.id)} submissions={submissions.filter(s => exams.find(e => e.id === s.examId && e.examinerId === activeUser.id))} onGradeRequest={() => {}} onSaveExam={e => setExams([...exams, e])} onDeleteExam={id => setExams(prev => prev.filter(e => e.id !== id))} onPublishResult={id => setGradingResults(prev => prev.map(r => r.submissionId === id ? { ...r, isPublished: true } : r))} onSaveManualGrade={res => { setGradingResults(prev => [...prev.filter(r => r.submissionId !== res.submissionId), res]); setSubmissions(prev => prev.map(s => s.id === res.submissionId ? { ...s, status: 'GRADED' } : s)); }} results={gradingResults} />}
+          {activeUser.role === UserRole.EXAMINER && <ExaminerDashboard examiner={activeUser} exams={exams.filter(e => e.examinerId === activeUser.id)} submissions={submissions.filter(s => exams.find(e => e.id === s.examId && e.examinerId === activeUser.id))} onGradeRequest={() => {}} onSaveExam={e => setExams([...exams, e])} onDeleteExam={id => setExams(prev => prev.filter(e => id !== id))} onPublishResult={id => setGradingResults(prev => prev.map(r => r.submissionId === id ? { ...r, isPublished: true } : r))} onSaveManualGrade={res => { setGradingResults(prev => [...prev.filter(r => r.submissionId !== res.submissionId), res]); setSubmissions(prev => prev.map(s => s.id === res.submissionId ? { ...s, status: 'GRADED' } : s)); }} results={gradingResults} />}
           {activeUser.role === UserRole.STUDENT && (!isExamActive ? (
             <div className="max-w-4xl mx-auto py-10 space-y-12">
                <div className="text-center space-y-6">
