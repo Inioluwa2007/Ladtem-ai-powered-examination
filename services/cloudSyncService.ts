@@ -1,6 +1,6 @@
 
 /**
- * LADTEM COMMISSION - Universal Neural Sync (V4.5)
+ * LADTEM COMMISSION - Universal Neural Sync (V4.6)
  * Optimized for Vercel Blob Persistence & JSON Hub Failover.
  */
 
@@ -18,20 +18,24 @@ export interface SyncState {
 }
 
 /**
- * Intelligent Conflict Resolution (LADTEM Merge V2)
+ * Intelligent Conflict Resolution (LADTEM Merge V3)
  */
 export const mergeStates = (local: SyncState, cloud: SyncState): SyncState => {
   const mergeCollection = (localCol: any[] = [], cloudCol: any[] = []) => {
     const map = new Map();
-    // Prioritize cloud for structure, but keep unique local entries
-    cloudCol.forEach(item => map.set(item.id, item));
+    // 1. Process Cloud Data
+    cloudCol.forEach(item => {
+      if (item && item.id) map.set(item.id, item);
+    });
+    // 2. Process Local Data (Priority for local changes)
     localCol.forEach(item => {
+      if (!item || !item.id) return;
       if (!map.has(item.id)) {
         map.set(item.id, item);
       } else {
         const existing = map.get(item.id);
-        // Compare data complexity as a proxy for 'freshness'
-        if (JSON.stringify(item).length > JSON.stringify(existing).length) {
+        // Compare data complexity or keep local if it was just changed
+        if (JSON.stringify(item).length >= JSON.stringify(existing).length) {
           map.set(item.id, item);
         }
       }
@@ -54,29 +58,32 @@ export const mergeStates = (local: SyncState, cloud: SyncState): SyncState => {
  */
 export const syncToCloud = async (nodeId: string, state: SyncState, vBlobUrl?: string): Promise<SyncState | null> => {
   try {
-    // 1. Fetch Latest State
+    // 1. Fetch Latest Cloud State
     let cloudData: any = {};
     
-    // Check Vercel Blob First if URL provided
     if (vBlobUrl) {
-      const vRes = await fetch(`${vBlobUrl}?t=${Date.now()}`, { cache: 'no-store' });
-      if (vRes.ok) {
-        const fullReg = await vRes.json();
-        cloudData = fullReg[nodeId]?.state || {};
-      }
-    } else {
-      // Fallback to Global Hub
-      const hRes = await fetch(`${HUB_BASE}/${HUB_ID}/latest`, {
-        headers: { 'X-Master-Key': HUB_KEY },
-        cache: 'no-store'
-      });
-      if (hRes.ok) {
-        const data = await hRes.json();
-        cloudData = data.record[nodeId]?.state || {};
-      }
+      try {
+        const vRes = await fetch(`${vBlobUrl}?t=${Date.now()}`, { cache: 'no-store' });
+        if (vRes.ok) {
+          const fullReg = await vRes.json();
+          cloudData = fullReg[nodeId]?.state || {};
+        }
+      } catch (e) { console.warn("Vercel Blob Fetch Error", e); }
     }
 
-    // 2. Atomic Merge
+    // Always fetch from JSONBin as the master coordination hub
+    const hRes = await fetch(`${HUB_BASE}/${HUB_ID}/latest`, {
+      headers: { 'X-Master-Key': HUB_KEY },
+      cache: 'no-store'
+    });
+    if (hRes.ok) {
+      const data = await hRes.json();
+      const hubCloud = data.record[nodeId]?.state || {};
+      // Merge Hub data into CloudData if Blob was empty
+      cloudData = mergeStates(cloudData, hubCloud);
+    }
+
+    // 2. Atomic Merge Local and Cloud
     const mergedState = mergeStates(state, cloudData);
 
     // 3. Prepare Registry
@@ -93,7 +100,6 @@ export const syncToCloud = async (nodeId: string, state: SyncState, vBlobUrl?: s
     };
 
     // 4. Commit to Hub
-    // (In a full Vercel setup, we'd also trigger a Webhook to update the Blob)
     const putRes = await fetch(`${HUB_BASE}/${HUB_ID}`, {
       method: 'PUT',
       body: JSON.stringify(registry),
@@ -116,7 +122,7 @@ export const fetchFromCloud = async (nodeId: string, vBlobUrl?: string): Promise
       const res = await fetch(`${vBlobUrl}?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const reg = await res.json();
-        return reg[nodeId]?.state || null;
+        if (reg[nodeId]?.state) return reg[nodeId].state;
       }
     }
 

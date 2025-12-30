@@ -39,26 +39,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newDept, setNewDept] = useState({ name: '', code: '', description: '', instituteId: '' });
   const [tempBlobUrl, setTempBlobUrl] = useState(blobConfigUrl || '');
   const [isTestingLink, setIsTestingLink] = useState(false);
+  const [lastTestResult, setLastTestResult] = useState<'SUCCESS' | 'FAIL' | null>(null);
 
   const pendingUsers = users.filter(u => u.role === UserRole.EXAMINER && !u.isApproved);
 
+  const handleOpenDeptModal = (instituteId: string) => {
+    setNewDept({ name: '', code: '', description: '', instituteId });
+    setShowDeptModal(true);
+  };
+
   const handleAddDept = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDept.instituteId) return;
-    onAddDepartment({ id: `dept-${Date.now()}`, ...newDept });
-    setNewDept({ name: '', code: '', description: '', instituteId: '' });
+    if (!newDept.instituteId || !newDept.name || !newDept.code) return;
+    onAddDepartment({ 
+      id: `dept-${Date.now()}`, 
+      name: newDept.name, 
+      code: newDept.code, 
+      description: newDept.description || 'Standard academic unit.',
+      instituteId: newDept.instituteId 
+    });
     setShowDeptModal(false);
   };
 
   const testConnection = async () => {
     if (!tempBlobUrl) return;
     setIsTestingLink(true);
+    setLastTestResult(null);
     try {
-      const res = await fetch(tempBlobUrl, { method: 'HEAD' });
-      if (res.ok) alert("✅ Connectivity Protocol Established: Vercel Blob is online.");
-      else alert("❌ Connection Refused: Ensure your Vercel Blob is set to 'Public' visibility.");
+      const res = await fetch(tempBlobUrl, { method: 'HEAD', cache: 'no-store' });
+      if (res.ok) {
+        setLastTestResult('SUCCESS');
+      } else {
+        setLastTestResult('FAIL');
+        alert("❌ Vercel Connection Refused. Ensure your Blob is set to 'Public'.");
+      }
     } catch (e) {
-      alert("❌ Link Broken: Could not reach the specified endpoint.");
+      setLastTestResult('FAIL');
+      alert("❌ Network Error. The URL may be incorrect or Vercel is blocking the request (CORS).");
     } finally {
       setIsTestingLink(false);
     }
@@ -121,8 +138,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <h1 className="text-3xl font-extrabold text-slate-900 uppercase tracking-tighter">Admin Console</h1>
         <div className="flex bg-slate-200 p-1 rounded-xl overflow-x-auto max-w-full">
           {['depts', 'users', 'approvals', 'infrastructure'].map((id) => (
-            <button key={id} onClick={() => setActiveTab(id as any)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === id ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>
-              {id === 'depts' ? 'Units' : id === 'approvals' ? `Approvals (${pendingUsers.length})` : id}
+            <button 
+              key={id} 
+              onClick={() => setActiveTab(id as any)} 
+              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all relative ${activeTab === id ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              {id === 'depts' ? 'Units' : id === 'approvals' ? 'Approvals' : id}
+              {id === 'approvals' && pendingUsers.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-rose-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[8px] animate-bounce">
+                  {pendingUsers.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -145,9 +171,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <h3 className="font-bold text-slate-900 text-lg">{dept.name}</h3>
                     </button>
                   ))}
-                  <button onClick={() => { setNewDept({ ...newDept, instituteId: inst.id }); setShowDeptModal(true); }} className="border-2 border-dashed border-slate-300 rounded-2xl p-8 hover:bg-white hover:border-indigo-400 transition-all flex flex-col items-center justify-center bg-slate-100 min-h-[160px]">
+                  <button onClick={() => handleOpenDeptModal(inst.id)} className="border-2 border-dashed border-slate-300 rounded-2xl p-8 hover:bg-white hover:border-indigo-400 transition-all flex flex-col items-center justify-center bg-slate-100 min-h-[160px]">
                     <svg className="w-8 h-8 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    <p className="font-black text-slate-600 text-[10px] uppercase tracking-widest">Add Unit</p>
+                    <p className="font-black text-slate-600 text-[10px] uppercase tracking-widest">Add Unit to {inst.name.split(' ')[0]}</p>
                   </button>
                 </div>
               </div>
@@ -181,7 +207,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white p-10 rounded-[3rem] border-2 border-slate-200 shadow-xl space-y-8">
+            <div className="bg-white p-10 rounded-[3rem] border-2 border-slate-200 shadow-xl space-y-8 relative overflow-hidden">
+              {blobConfigUrl && (
+                <div className="absolute top-6 right-6 flex items-center space-x-2 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">BRIDGE ACTIVE</span>
+                </div>
+              )}
               <h3 className="text-xl font-black uppercase tracking-tighter text-slate-900">3. Bridge Connection</h3>
               <div className="space-y-6">
                  <div>
@@ -192,40 +224,65 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         value={tempBlobUrl} 
                         onChange={(e) => setTempBlobUrl(e.target.value)} 
                         placeholder="https://...blob.vercel-storage.com/payload.json" 
-                        className="flex-1 bg-slate-50 border-2 border-slate-300 rounded-2xl px-5 py-4 font-bold text-indigo-600 text-xs focus:ring-4 focus:ring-indigo-100 outline-none transition-all" 
+                        className={`flex-1 bg-slate-50 border-2 rounded-2xl px-5 py-4 font-bold text-indigo-600 text-xs focus:ring-4 focus:ring-indigo-100 outline-none transition-all ${lastTestResult === 'SUCCESS' ? 'border-emerald-400' : 'border-slate-300'}`} 
                       />
                       <button 
                         onClick={testConnection}
                         disabled={!tempBlobUrl || isTestingLink}
-                        className="px-4 bg-slate-100 rounded-2xl border-2 border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 transition-all"
+                        className={`px-4 rounded-2xl border-2 transition-all flex items-center justify-center w-14 ${lastTestResult === 'SUCCESS' ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-slate-100 border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200'}`}
+                        title="Test Link Signal"
                       >
-                        {isTestingLink ? '...' : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
+                        {isTestingLink ? (
+                          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        )}
                       </button>
                     </div>
                  </div>
-                 <button onClick={() => onUpdateBlobConfig?.(tempBlobUrl)} className="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] hover:bg-black transition-all text-xs uppercase tracking-widest shadow-xl">
-                   Authorize Node Bridge
-                 </button>
+                 <div className="grid grid-cols-2 gap-4">
+                   <button 
+                      onClick={() => {
+                        onUpdateBlobConfig?.(tempBlobUrl);
+                        alert("🚀 Node Bridge Authorized! Your device is now paired with Vercel Cloud storage.");
+                      }} 
+                      className="bg-slate-900 text-white font-black py-5 rounded-[2rem] hover:bg-black transition-all text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center space-x-3"
+                    >
+                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                     <span>Authorize Bridge</span>
+                   </button>
+                   {blobConfigUrl && (
+                     <a 
+                      href={blobConfigUrl} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="bg-slate-100 border-2 border-slate-200 text-slate-600 font-black py-5 rounded-[2rem] hover:bg-white transition-all text-[10px] uppercase tracking-widest flex items-center justify-center space-x-3"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      <span>View Cloud Data</span>
+                    </a>
+                   )}
+                 </div>
               </div>
             </div>
 
-            <div className="bg-slate-900 p-10 rounded-[3rem] text-white space-y-8 relative overflow-hidden">
+            <div className="bg-slate-900 p-10 rounded-[3rem] text-white space-y-8 relative overflow-hidden shadow-2xl">
               <div className="absolute top-0 right-0 p-8 opacity-5">
                  <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               </div>
-              <h3 className="text-xl font-black uppercase tracking-tighter text-emerald-400">Pair Multi-Device Guide</h3>
+              <h3 className="text-xl font-black uppercase tracking-tighter text-emerald-400">Multi-Device Pairing</h3>
               <div className="space-y-4">
                  <div className="flex items-start space-x-4">
                     <div className="bg-white/10 p-2 rounded-lg text-emerald-400 font-black">01</div>
-                    <p className="text-[11px] font-bold text-slate-300 leading-tight">Enter your Unique Node ID (e.g. LADTEM-1) in the Sync Hub on **Device A**.</p>
+                    <p className="text-[11px] font-bold text-slate-300 leading-tight">Enter your Unique Node ID (e.g. LADTEM-OFFICE) in the Sync Hub on Device A.</p>
                  </div>
                  <div className="flex items-start space-x-4">
                     <div className="bg-white/10 p-2 rounded-lg text-emerald-400 font-black">02</div>
-                    <p className="text-[11px] font-bold text-slate-300 leading-tight">Open the app on **Device B** and use the **SAME ID** to pair instantly.</p>
+                    <p className="text-[11px] font-bold text-slate-300 leading-tight">Open the app on Device B and use the SAME ID to pair instantly.</p>
                  </div>
                  <div className="flex items-start space-x-4">
                     <div className="bg-white/10 p-2 rounded-lg text-emerald-400 font-black">03</div>
-                    <p className="text-[11px] font-bold text-slate-300 leading-tight">Once paired, all exams and student results will stream between devices automatically.</p>
+                    <p className="text-[11px] font-bold text-slate-300 leading-tight">Once paired, all data will stream between devices via your Vercel Blob cloud link.</p>
                  </div>
               </div>
             </div>
@@ -233,7 +290,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Other tabs remain identical */}
       {activeTab === 'users' && (
         <div className="bg-white rounded-3xl border-2 border-slate-200 overflow-hidden shadow-sm">
           <table className="w-full text-left text-xs">
@@ -250,6 +306,48 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {activeTab === 'approvals' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
+           {pendingUsers.map(user => (
+             <div key={user.id} className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-200 shadow-xl space-y-6">
+                <div className="flex items-center space-x-4">
+                  <div className="h-16 w-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center text-xl font-black">{user.name.charAt(0)}</div>
+                  <div><p className="text-lg font-black text-slate-900">{user.name}</p><p className="text-[10px] text-slate-400 font-black uppercase">Examiner Application</p></div>
+                </div>
+                <div className="space-y-4 pt-4 border-t border-slate-50 text-xs">
+                   <p className="font-bold text-slate-500">{user.email}</p>
+                   <div className="flex gap-2">
+                     <button onClick={() => onApproveUser(user.id)} className="flex-1 bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all text-[10px] uppercase tracking-widest shadow-lg">Authorize</button>
+                     <button onClick={() => onDeclineUser(user.id)} className="flex-1 border-2 border-slate-200 text-slate-400 font-black py-4 rounded-2xl hover:text-rose-600 hover:border-rose-200 transition-all text-[10px] uppercase tracking-widest">Reject</button>
+                   </div>
+                </div>
+             </div>
+           ))}
+           {pendingUsers.length === 0 && <div className="col-span-full py-20 text-center text-slate-400 font-bold uppercase italic text-xs">All examiner applications processed.</div>}
+        </div>
+      )}
+
+      {showDeptModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-8">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Provision Unit</h2>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Target: {institutes.find(i => i.id === newDept.instituteId)?.name}</p>
+              </div>
+              <button onClick={() => setShowDeptModal(false)} className="bg-slate-100 p-2 rounded-full hover:bg-slate-200"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <form onSubmit={handleAddDept} className="space-y-6">
+              <div className="space-y-5">
+                <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Name</label><input required value={newDept.name} onChange={e => setNewDept({...newDept, name: e.target.value})} type="text" className="w-full bg-slate-50 border-2 border-slate-400 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none" placeholder="e.g. Cinema Faculty" /></div>
+                <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Code</label><input required value={newDept.code} onChange={e => setNewDept({...newDept, code: e.target.value})} type="text" className="w-full bg-slate-50 border-2 border-slate-400 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none" placeholder="e.g. CFM-400" /></div>
+              </div>
+              <button type="submit" className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] hover:bg-indigo-700 transition-all uppercase tracking-widest text-xs">Finalize Provisioning</button>
+            </form>
+          </div>
         </div>
       )}
     </div>
