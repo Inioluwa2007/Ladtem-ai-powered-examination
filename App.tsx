@@ -203,18 +203,21 @@ const App: React.FC = () => {
 
   const handleLogout = () => { 
     isLoggingOut.current = true;
-    // Wipe all local keys immediately
-    Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
-    // Reset state
+    // CRITICAL FIX: Only remove session-specific keys, preserve application data
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
+    localStorage.removeItem(STORAGE_KEYS.PORTAL);
+    
+    // Reset session state
     setActiveUser(null); 
     setPortal(null); 
     setIsExamActive(false); 
     notify("Session Terminated", "info");
-    // Force a fresh reload after state has been cleared to prevent ghosting
+    
+    // Force a fresh reload after state has been cleared to prevent any ghost UI elements
     setTimeout(() => { 
       isLoggingOut.current = false;
       window.location.reload(); 
-    }, 500);
+    }, 600);
   };
   
   const handleExitPortal = () => { 
@@ -284,7 +287,7 @@ const App: React.FC = () => {
             <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Syncing...' : 'Network Stable'}</span>
           </div>
           {activeUser.role === UserRole.ADMIN && <AdminDashboard institutes={institutes} departments={departments} users={users} onAddDepartment={d => setDepartments([...departments, d])} onDeleteDepartment={id => setDepartments(prev => prev.filter(d => d.id !== id))} onApproveUser={id => setUsers(prev => prev.map(u => u.id === id ? { ...u, isApproved: true } : u))} onDeclineUser={id => setUsers(prev => prev.filter(u => u.id !== id))} onDeleteUser={id => setUsers(prev => prev.filter(u => u.id !== id))} />}
-          {activeUser.role === UserRole.EXAMINER && <ExaminerDashboard examiner={activeUser} exams={exams.filter(e => e.examinerId === activeUser.id)} submissions={submissions.filter(s => exams.find(e => e.id === s.examId && e.examinerId === activeUser.id))} onGradeRequest={() => {}} onSaveExam={e => setExams([...exams, e])} onDeleteExam={id => setExams(prev => prev.filter(e => id !== id))} onPublishResult={id => setGradingResults(prev => prev.map(r => r.submissionId === id ? { ...r, isPublished: true } : r))} onSaveManualGrade={res => { setGradingResults(prev => [...prev.filter(r => r.submissionId !== res.submissionId), res]); setSubmissions(prev => prev.map(s => s.id === res.submissionId ? { ...s, status: 'GRADED' } : s)); }} results={gradingResults} />}
+          {activeUser.role === UserRole.EXAMINER && <ExaminerDashboard examiner={activeUser} exams={exams.filter(e => e.examinerId === activeUser.id)} submissions={submissions.filter(s => exams.find(e => e.id === s.examId && e.examinerId === activeUser.id))} onGradeRequest={() => {}} onSaveExam={e => setExams([...exams, e])} onDeleteExam={id => setExams(prev => prev.filter(e => e.id !== id))} onPublishResult={id => setGradingResults(prev => prev.map(r => r.submissionId === id ? { ...r, isPublished: true } : r))} onSaveManualGrade={res => { setGradingResults(prev => [...prev.filter(r => r.submissionId !== res.submissionId), res]); setSubmissions(prev => prev.map(s => s.id === res.submissionId ? { ...s, status: 'GRADED' } : s)); }} results={gradingResults} />}
           {activeUser.role === UserRole.STUDENT && (!isExamActive ? (
             <div className="max-w-4xl mx-auto py-10 space-y-12">
                <div className="text-center space-y-6">
