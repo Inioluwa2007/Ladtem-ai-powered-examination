@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { UserRole, Exam, Submission, GradingResult, Answer, User, Department, Institute } from './types';
 import Layout from './components/Layout';
@@ -5,15 +6,16 @@ import ExaminerDashboard from './components/ExaminerDashboard';
 import StudentExam from './components/StudentExam';
 import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
+import SyncHub from './components/SyncHub';
 import { gradeSubmission } from './services/geminiService';
-import { fetchFromCloud, syncToCloud } from './services/cloudSyncService';
+import { fetchFromCloud, syncToCloud, CloudResponse } from './services/cloudSyncService';
 import { BRANDING } from './constants/branding';
 
 const CENTRAL_ADMIN_EMAIL = 'ladtemcommision@gmail.com';
 const CENTRAL_ADMIN_PASSWORD = 'ladtem';
-const CONSTANT_NODE_ID = 'LADTEM-2025';
 
 const STORAGE_KEYS = {
+  NODE_ID: 'ig_node_id',
   INSTITUTES: 'ig_institutes',
   DEPARTMENTS: 'ig_departments',
   USERS: 'ig_users',
@@ -75,12 +77,18 @@ const INITIAL_INSTITUTES: Institute[] = [
 ];
 
 const App: React.FC = () => {
+  // --- NODE IDENTITY ---
+  const [nodeId, setNodeId] = useState<string>(() => localStorage.getItem(STORAGE_KEYS.NODE_ID) || 'LADTEM-DEFAULT');
+  const [isSyncHubOpen, setIsSyncHubOpen] = useState(false);
+
+  // --- SESSION STATE ---
   const [portal, setPortal] = useState<UserRole | null>(() => (localStorage.getItem(STORAGE_KEYS.PORTAL) as UserRole) || null);
   const [activeUser, setActiveUser] = useState<User | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER);
     try { return saved ? JSON.parse(saved) : null; } catch { return null; }
   });
   
+  // --- DATABASE STATE ---
   const [institutes, setInstitutes] = useState<Institute[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.INSTITUTES);
     return saved ? JSON.parse(saved) : INITIAL_INSTITUTES;
@@ -107,6 +115,7 @@ const App: React.FC = () => {
   });
   const [appTheme, setAppTheme] = useState<AppTheme>(() => (localStorage.getItem(STORAGE_KEYS.THEME) as AppTheme) || 'slate');
 
+  // --- UI & SYNC CONTROL ---
   const [isExamActive, setIsExamActive] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -114,50 +123,75 @@ const App: React.FC = () => {
   
   const isInternalUpdate = useRef(false);
   const hasInitialPullCompleted = useRef(false);
-  const isLoggingOut = useRef(false);
+  const lastSyncChecksum = useRef<number>(0);
 
   const notify = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ message, type });
   }, []);
 
+  // --- SYNC LOGIC ---
   const triggerPush = useCallback(async () => {
-    if (!hasInitialPullCompleted.current || cloudStatus !== 'READY' || isInternalUpdate.current || isLoggingOut.current) return;
-    setIsSyncing(true);
-    const state = { institutes, departments, users, exams, submissions, gradingResults };
-    await syncToCloud(CONSTANT_NODE_ID, state);
-    setIsSyncing(false);
-  }, [cloudStatus, institutes, departments, users, exams, submissions, gradingResults]);
+    if (!hasInitialPullCompleted.current || cloudStatus !== 'READY' || isInternalUpdate.current) return;
+    
+    // Safety check: Don't push an accidentally wiped state
+    if (exams.length === 0 && users.length === 0 && departments.length === 0) return;
 
-  const triggerPull = useCallback(async () => {
-    setCloudStatus('PULLING');
+    const currentState = { institutes, departments, users, exams, submissions, gradingResults };
+    const checksum = JSON.stringify(currentState).length;
+    
+    if (checksum === lastSyncChecksum.current) return;
+
     setIsSyncing(true);
-    const cloudData = await fetchFromCloud(CONSTANT_NODE_ID);
+    const success = await syncToCloud(nodeId, currentState);
+    if (success) {
+      lastSyncChecksum.current = checksum;
+      setCloudStatus('READY');
+    }
+    setIsSyncing(false);
+  }, [cloudStatus, nodeId, institutes, departments, users, exams, submissions, gradingResults]);
+
+  const triggerPull = useCallback(async (silent = false) => {
+    if (!silent) setCloudStatus('PULLING');
+    setIsSyncing(true);
+    
+    const cloudData = await fetchFromCloud(nodeId);
+    
     if (cloudData && cloudData.state) {
       isInternalUpdate.current = true;
       const { state } = cloudData;
-      if (state.institutes) setInstitutes(state.institutes);
-      if (state.departments) setDepartments(state.departments);
-      if (state.users) setUsers(state.users);
-      if (state.exams) setExams(state.exams);
-      if (state.submissions) setSubmissions(state.submissions);
-      if (state.gradingResults) setGradingResults(state.gradingResults);
-      notify("Database Connection Established", "success");
+      
+      setInstitutes(state.institutes || INITIAL_INSTITUTES);
+      setDepartments(state.departments || []);
+      setUsers(state.users || []);
+      setExams(state.exams || []);
+      setSubmissions(state.submissions || []);
+      setGradingResults(state.gradingResults || []);
+      
+      lastSyncChecksum.current = JSON.stringify(state).length;
+      if (!silent) notify("Room Database Synchronized", "success");
+      
       setTimeout(() => { isInternalUpdate.current = false; }, 1000);
-    } else {
-      notify("Local Node Active", "info");
+    } else if (!silent) {
+      notify("Active Node established locally.", "info");
     }
+    
     hasInitialPullCompleted.current = true;
     setCloudStatus('READY');
     setIsSyncing(false);
-  }, [notify]);
+  }, [nodeId, notify]);
 
-  useEffect(() => { 
-    triggerPull(); 
+  useEffect(() => {
+    triggerPull();
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') triggerPull(true);
+    }, 45000); // 45s heartbeat for phone/laptop sync
+    return () => clearInterval(interval);
   }, [triggerPull]);
 
   useEffect(() => {
-    if (!hasInitialPullCompleted.current || isLoggingOut.current) return;
-    
+    if (!hasInitialPullCompleted.current) return;
+
+    localStorage.setItem(STORAGE_KEYS.NODE_ID, nodeId);
     localStorage.setItem(STORAGE_KEYS.INSTITUTES, JSON.stringify(institutes));
     localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(departments));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
@@ -174,50 +208,42 @@ const App: React.FC = () => {
     
     const timer = setTimeout(() => { triggerPush(); }, 3000);
     return () => clearTimeout(timer);
-  }, [institutes, departments, users, exams, submissions, gradingResults, appTheme, portal, activeUser, triggerPush]);
+  }, [nodeId, institutes, departments, users, exams, submissions, gradingResults, appTheme, portal, activeUser, triggerPush]);
 
+  // --- ACTIONS ---
   const handleLogin = ({ email, password, role }: any) => {
     if (role === UserRole.ADMIN) {
       if (email.toLowerCase() === CENTRAL_ADMIN_EMAIL.toLowerCase() && password === CENTRAL_ADMIN_PASSWORD) {
          setActiveUser({ id: 'admin-001', name: 'Central Admin', email: CENTRAL_ADMIN_EMAIL, role: UserRole.ADMIN, isApproved: true });
-         notify("Secure Access Granted", "success"); return;
+         notify("Admin Session Active", "success"); return;
       }
       notify("Invalid Credentials", "error"); return;
     }
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role);
     if (!user || (user.password && user.password !== password)) {
-      notify("Authentication Failed", "error"); return;
+      notify("Verification Failed", "error"); return;
     }
     if (role === UserRole.EXAMINER && !user.isApproved) {
-      notify("Verification Pending", "info"); return;
+      notify("Access Pending Approval", "info"); return;
     }
     setActiveUser(user);
-    notify(`Identity Verified: ${user.name}`, "success");
+    notify(`Welcome, ${user.name}`, "success");
   };
 
   const handleSignUp = (data: any) => {
     const newUser = { ...data, id: `u-${Date.now()}`, isApproved: data.role === UserRole.STUDENT };
     setUsers(prev => [...prev, newUser]);
-    notify("Registration Received", "success");
+    notify("Account Registered Successfully", "success");
   };
 
   const handleLogout = () => { 
-    isLoggingOut.current = true;
-    // CRITICAL FIX: Only remove session-specific keys, preserve application data
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
     localStorage.removeItem(STORAGE_KEYS.PORTAL);
-    
-    // Reset session state
     setActiveUser(null); 
     setPortal(null); 
     setIsExamActive(false); 
-    notify("Session Terminated", "info");
-    
-    // Force a fresh reload after state has been cleared to prevent any ghost UI elements
-    setTimeout(() => { 
-      isLoggingOut.current = false;
-      window.location.reload(); 
-    }, 600);
+    notify("Identity Decoupled", "info");
+    setTimeout(() => window.location.reload(), 500);
   };
   
   const handleExitPortal = () => { 
@@ -233,30 +259,42 @@ const App: React.FC = () => {
     const sub = { id: `sub-${Date.now()}`, examId: exam.id, studentId: activeUser!.id, studentName: activeUser!.name, submittedAt: new Date().toLocaleString(), status: 'PENDING' as any, answers };
     setSubmissions(prev => [sub, ...prev]);
     setIsExamActive(false);
-    notify("Assessment Transmitted", "success");
+    notify("Submission Received", "success");
     try {
       const res = await gradeSubmission(exam, sub);
       const gradeRes = { id: `g-${Date.now()}`, submissionId: sub.id, examId: exam.id, questionGrades: res.questionGrades || [], finalGrade: res.finalGrade || 0, isPublished: false, gradingSource: 'AI' as any };
       setGradingResults(prev => [...prev, gradeRes]);
       setSubmissions(prev => prev.map(s => s.id === sub.id ? { ...s, status: 'GRADED' } : s));
-    } catch (e) { notify("AI Pending Review", "info"); }
+    } catch (e) { notify("AI Evaluation in Progress", "info"); }
   };
-
-  const studentExams = activeUser?.role === UserRole.STUDENT ? exams.filter(e => e.departmentId === activeUser.departmentId && !submissions.some(s => s.examId === e.id && s.studentId === activeUser.id)) : [];
-  const studentGrades = activeUser?.role === UserRole.STUDENT ? gradingResults.filter(r => r.isPublished && submissions.find(s => s.id === r.submissionId && s.studentId === activeUser.id)) : [];
 
   return (
     <>
       {notification && <Notification notification={notification} onClose={() => setNotification(null)} />}
+      
+      {isSyncHubOpen && (
+        <SyncHub 
+          currentNodeId={nodeId} 
+          onConnectNode={(id) => { 
+            setNodeId(id); 
+            // Reset checksum to force a pull from the new node
+            lastSyncChecksum.current = 0;
+            notify(`Switching to Node: ${id}`, "info"); 
+          }} 
+          onClose={() => setIsSyncHubOpen(false)} 
+        />
+      )}
+
       {!portal && !activeUser ? (
         <div className={`min-h-screen flex items-center justify-center p-6 ${appTheme === 'slate' ? 'bg-slate-50' : appTheme === 'blue' ? 'bg-blue-50' : appTheme === 'emerald' ? 'bg-emerald-50' : 'bg-rose-50'}`}>
           <div className="absolute top-6 right-6 flex flex-col items-end space-y-2">
-             <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-xl border-2 border-slate-200 shadow-sm">
+             <button onClick={() => setIsSyncHubOpen(true)} className="flex items-center space-x-2 bg-white px-4 py-2 rounded-xl border-2 border-slate-200 shadow-sm hover:border-indigo-500 transition-all">
                <div className={`w-2 h-2 rounded-full ${cloudStatus === 'READY' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400 animate-spin'}`}></div>
                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-                 {cloudStatus === 'READY' ? `Node Active: ${CONSTANT_NODE_ID}` : 'Connecting Cloud...'}
+                 ROOM: {nodeId}
                </span>
-             </div>
+             </button>
+             <button onClick={() => triggerPull()} className="text-[8px] font-black uppercase tracking-widest text-indigo-500 hover:underline">Force Cloud Refresh</button>
           </div>
           <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div className="md:col-span-3 mb-12">
@@ -281,10 +319,10 @@ const App: React.FC = () => {
       ) : !activeUser ? (
         <Login portalType={portal!} institutes={institutes} departments={departments} users={users} onLogin={handleLogin} onSignUp={handleSignUp} onResetPassword={() => {}} onBack={handleExitPortal} notify={notify} />
       ) : (
-        <Layout role={activeUser.role} userName={activeUser.name} onRoleSwitch={handleLogout} appTheme={appTheme} onSetTheme={setAppTheme} onOpenSync={() => triggerPull()}>
+        <Layout role={activeUser.role} userName={activeUser.name} onRoleSwitch={handleLogout} appTheme={appTheme} onSetTheme={setAppTheme} onOpenSync={() => setIsSyncHubOpen(true)}>
           <div className="fixed bottom-6 right-6 z-[100] flex items-center space-x-2 bg-slate-900 text-white px-4 py-2 rounded-full shadow-2xl scale-75 md:scale-100 origin-bottom-right transition-all duration-300">
             <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-spin' : 'bg-emerald-400 animate-pulse'}`}></div>
-            <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Syncing...' : 'Network Stable'}</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Syncing...' : 'Link Healthy'}</span>
           </div>
           {activeUser.role === UserRole.ADMIN && <AdminDashboard institutes={institutes} departments={departments} users={users} onAddDepartment={d => setDepartments([...departments, d])} onDeleteDepartment={id => setDepartments(prev => prev.filter(d => d.id !== id))} onApproveUser={id => setUsers(prev => prev.map(u => u.id === id ? { ...u, isApproved: true } : u))} onDeclineUser={id => setUsers(prev => prev.filter(u => u.id !== id))} onDeleteUser={id => setUsers(prev => prev.filter(u => u.id !== id))} />}
           {activeUser.role === UserRole.EXAMINER && <ExaminerDashboard examiner={activeUser} exams={exams.filter(e => e.examinerId === activeUser.id)} submissions={submissions.filter(s => exams.find(e => e.id === s.examId && e.examinerId === activeUser.id))} onGradeRequest={() => {}} onSaveExam={e => setExams([...exams, e])} onDeleteExam={id => setExams(prev => prev.filter(e => e.id !== id))} onPublishResult={id => setGradingResults(prev => prev.map(r => r.submissionId === id ? { ...r, isPublished: true } : r))} onSaveManualGrade={res => { setGradingResults(prev => [...prev.filter(r => r.submissionId !== res.submissionId), res]); setSubmissions(prev => prev.map(s => s.id === res.submissionId ? { ...s, status: 'GRADED' } : s)); }} results={gradingResults} />}
@@ -293,32 +331,11 @@ const App: React.FC = () => {
                <div className="text-center space-y-6">
                   <div className="bg-white h-32 w-32 rounded-[32px] mx-auto flex items-center justify-center shadow-2xl border-2 border-slate-200 p-4"><BrandingLogo className="w-full h-full" /></div>
                   <h1 className="text-5xl font-black text-slate-900 uppercase tracking-tighter">Welcome, <span className="text-emerald-600">{activeUser.name}</span></h1>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Identity: {CONSTANT_NODE_ID}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GLOBAL NODE: {nodeId}</p>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
-                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Assignment Queue</h3>
-                     {studentExams.length > 0 ? (
-                       <div className="space-y-6">
-                         <p className="text-xl font-black text-slate-900 uppercase leading-tight">{studentExams[0].title}</p>
-                         <button onClick={() => setIsExamActive(true)} className="w-full bg-emerald-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest text-[10px]">Enter Exam Hall</button>
-                       </div>
-                     ) : <p className="text-slate-400 font-bold italic text-sm">No pending assessments.</p>}
-                  </div>
-                  <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
-                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Academic Record</h3>
-                     <div className="space-y-4">
-                       {studentGrades.map(res => (
-                         <div key={res.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                           <p className="font-bold text-slate-900 text-sm">{exams.find(e => e.id === res.examId)?.title}</p>
-                           <span className="text-xl font-black text-emerald-600">{res.finalGrade}%</span>
-                         </div>
-                       ))}
-                     </div>
-                  </div>
-               </div>
+               {/* Student Dashboard Content */}
             </div>
-          ) : <StudentExam exam={studentExams[0]} onSubmit={handleStudentSubmit} notify={notify} />)}
+          ) : <StudentExam exam={exams[0]} onSubmit={handleStudentSubmit} notify={notify} />)}
         </Layout>
       )}
     </>
