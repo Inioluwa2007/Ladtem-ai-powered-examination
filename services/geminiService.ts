@@ -2,11 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Exam, Submission, GradingResult, QuestionType } from "../types";
 
-// Always use exactly this initialization format as per required guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+/**
+ * LADTEM COMMISSION - Neural Grading Service
+ * Uses Gemini-3-Pro for complex academic evaluation.
+ */
+const getAIClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.error("LADTEM SECURITY ALERT: API_KEY environment variable is missing. Deployment may be incomplete.");
+  }
+  return new GoogleGenAI({ apiKey: apiKey || '' });
+};
 
 export const gradeSubmission = async (exam: Exam, submission: Submission): Promise<GradingResult> => {
-  // Use gemini-3-pro-preview for high-quality reasoning tasks
+  const ai = getAIClient();
   const model = 'gemini-3-pro-preview';
   
   const systemInstruction = `You are a senior academic examiner for the Ladtem Commission. 
@@ -43,7 +52,6 @@ export const gradeSubmission = async (exam: Exam, submission: Submission): Promi
 
   promptParts.push({ text: `Questions & Student Answers:\n${submissionPrompt}` });
 
-  // Add audio parts if any voice answers exist
   submission.answers.forEach(a => {
     if (a.audioData) {
       const base64Data = a.audioData.split(',')[1] || a.audioData;
