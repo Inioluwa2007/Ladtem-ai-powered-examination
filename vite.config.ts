@@ -5,13 +5,23 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // This allows process.env.API_KEY to be accessible in the browser
     'process.env': {
       API_KEY: process.env.API_KEY
     }
   },
   build: {
     outDir: 'dist',
-    sourcemap: false
+    minify: 'esbuild',
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['recharts'],
+          genai: ['@google/genai']
+        }
+      }
+    }
   }
 });
