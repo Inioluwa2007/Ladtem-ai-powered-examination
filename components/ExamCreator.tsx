@@ -75,10 +75,12 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ examiner, onSave, onCancel })
       alert("Please provide a title and text for all questions.");
       return;
     }
+    // Added instituteId to satisfy the Exam interface requirements
     onSave({
       id: `exam-${Date.now()}`,
       title,
       description,
+      instituteId: examiner.instituteId || 'unknown',
       departmentId: examiner.departmentId || 'unknown',
       examinerId: examiner.id,
       questions,

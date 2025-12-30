@@ -17,19 +17,26 @@ export interface QuestionOption {
   isCorrect: boolean;
 }
 
+export interface Institute {
+  id: string;
+  name: string;
+}
+
 export interface Department {
   id: string;
   name: string;
   code: string;
   description: string;
+  instituteId: string;
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string; // Added for authentication support
+  password?: string;
   role: UserRole;
+  instituteId?: string;
   departmentId?: string;
   isApproved: boolean;
 }
@@ -53,6 +60,7 @@ export interface Exam {
   id: string;
   title: string;
   description: string;
+  instituteId: string;
   departmentId: string;
   examinerId: string;
   questions: Question[];
@@ -63,7 +71,7 @@ export interface Exam {
 export interface Answer {
   questionId: string;
   text: string;
-  audioData?: string; // Base64 audio for VOICE type
+  audioData?: string;
 }
 
 export interface Submission {

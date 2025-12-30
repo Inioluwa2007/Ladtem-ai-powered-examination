@@ -6,7 +6,8 @@ import { Exam, Submission, GradingResult, QuestionType } from "../types";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const gradeSubmission = async (exam: Exam, submission: Submission): Promise<GradingResult> => {
-  const model = 'gemini-3-flash-preview';
+  // Use gemini-3-pro-preview for high-quality reasoning tasks
+  const model = 'gemini-3-pro-preview';
   
   const systemInstruction = `You are a senior academic examiner for the Ladtem Commission. 
   Your task is to evaluate student responses based strictly on the provided rubric. 
@@ -19,8 +20,6 @@ export const gradeSubmission = async (exam: Exam, submission: Submission): Promi
   1. ESSAY: Evaluate depth, critical thinking, and accuracy.
   2. MCQ: pre-defined correct answer. Exact match = Full points. Mismatch = 0 points.
   3. VOICE: Evaluate transcript/audio for clarity, pronunciation, and content accuracy.
-  
-  For VOICE questions, the input might be a base64 audio string or a transcript placeholder. Focus on the core message.
   
   Return a JSON result with questionGrades and a finalGrade (0-100).`;
 

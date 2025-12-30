@@ -33,7 +33,7 @@ const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, 
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tighter">Examiner Dashboard</h1>
+          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Welcome, {examiner.name}</h1>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Faculty Management Node</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -67,12 +67,12 @@ const ExaminerDashboard: React.FC<ExaminerDashboardProps> = ({ examiner, exams, 
                     return (
                       <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            <div className="h-10 w-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black">
+                          <div className="flex items-center space-x-4">
+                            <div className="h-12 w-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black shadow-lg shadow-indigo-100">
                               {sub.studentName.charAt(0)}
                             </div>
                             <div>
-                              <p className="font-bold text-slate-900 text-sm">{sub.studentName}</p>
+                              <p className="font-black text-slate-900 text-base tracking-tight">{sub.studentName}</p>
                               <p className="text-[10px] text-slate-400 font-black uppercase">ID: {sub.id.substring(4, 12)}</p>
                             </div>
                           </div>

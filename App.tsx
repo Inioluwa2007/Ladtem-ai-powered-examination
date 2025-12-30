@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { UserRole, Exam, Submission, GradingResult, Answer, User, Department } from './types';
+import { UserRole, Exam, Submission, GradingResult, Answer, User, Department, Institute } from './types';
 import Layout from './components/Layout';
 import ExaminerDashboard from './components/ExaminerDashboard';
 import StudentExam from './components/StudentExam';
@@ -48,50 +49,26 @@ const Notification: React.FC<{ notification: NotificationState; onClose: () => v
   );
 };
 
-// Enhanced Branding Logo with improved retry logic for different asset paths
 export const BrandingLogo: React.FC<{ className?: string }> = ({ className }) => {
-  const [error, setError] = useState(false);
-  const [src, setSrc] = useState(BRANDING.LOGO_SRC);
-  
-  const handleLogoError = () => {
-    // Try different common pathing conventions if the primary one fails
-    if (src === BRANDING.LOGO_SRC) {
-      // If 'logo.jpg' failed, try './logo.jpg'
-      setSrc(`./${BRANDING.LOGO_SRC}`);
-    } else if (src === `./${BRANDING.LOGO_SRC}`) {
-      // If './logo.jpg' failed, try root absolute '/logo.jpg'
-      setSrc(`/${BRANDING.LOGO_SRC}`);
-    } else {
-      // All standard attempts failed
-      console.warn("LADTEM: Failed to load logo from all standard paths.");
-      setError(true);
-    }
-  };
-
-  if (error) {
-    return (
-      <div className={`${className} bg-slate-100 flex flex-col items-center justify-center text-slate-400 border-2 border-slate-200 rounded-3xl`}>
-        <svg className="w-1/2 h-1/2 opacity-20" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-        </svg>
-        <span className="text-[8px] font-black uppercase tracking-widest mt-1">LADTEM</span>
-      </div>
-    );
-  }
-
   return (
     <img 
-      src={src} 
+      src={BRANDING.LOGO_SRC} 
       alt={BRANDING.NAME} 
-      className={`${className} transition-opacity duration-300`} 
-      onError={handleLogoError} 
+      className={`${className} transition-opacity duration-300 object-contain`} 
     />
   );
 };
 
+const INITIAL_INSTITUTES: Institute[] = [
+  { id: 'inst-1', name: 'Discipleship Film and Media Institute' },
+  { id: 'inst-2', name: 'Institute of Entrepreneurship Study and Research' },
+  { id: 'inst-3', name: 'Research Plus' }
+];
+
 const App: React.FC = () => {
   const [portal, setPortal] = useState<UserRole | null>(null);
   const [activeUser, setActiveUser] = useState<User | null>(null);
+  const [institutes, setInstitutes] = useState<Institute[]>(INITIAL_INSTITUTES);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
@@ -126,31 +103,40 @@ const App: React.FC = () => {
       return;
     }
     if (role === UserRole.EXAMINER && !existingUser.isApproved) {
-      notify("Faculty Status: Awaiting Central Commission verification.", "info");
+      notify("Faculty Status: Awaiting institutional verification.", "info");
       return;
     }
     setActiveUser(existingUser);
     notify(`Welcome back, ${existingUser.name}`, "success");
   };
 
-  const handleSignUp = ({ name, email, password, role, departmentId }: { name: string; email: string; password?: string; role: UserRole; departmentId: string }) => {
+  const handleSignUp = ({ name, email, password, role, instituteId, departmentId }: { name: string; email: string; password?: string; role: UserRole; instituteId: string; departmentId: string }) => {
     if (role === UserRole.ADMIN) return;
     if (users.some(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role)) {
       notify("Registration Error: Email already registered.", "error");
       return;
     }
-    const newUser: User = { id: `u-${Date.now()}`, name, email, password, role, departmentId, isApproved: role === UserRole.STUDENT };
+    const newUser: User = { 
+      id: `u-${Date.now()}`, 
+      name, 
+      email, 
+      password, 
+      role, 
+      instituteId, 
+      departmentId, 
+      isApproved: role === UserRole.STUDENT 
+    };
     setUsers(prev => [...prev, newUser]);
     notify(role === UserRole.EXAMINER ? "Faculty application received." : "Identity Registered Successfully", "success");
   };
 
   const handleResetPassword = (email: string, role: UserRole, newPassword: string) => {
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role);
-    if (!user) {
+    const targetUser = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role);
+    if (!targetUser) {
       notify("Reset Failed: User record not found.", "error");
       return;
     }
-    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, password: newPassword } : u));
+    setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, password: newPassword } : u));
     notify("Password successfully updated. Please sign in.", "success");
   };
 
@@ -225,9 +211,11 @@ const App: React.FC = () => {
           <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div className="md:col-span-3 mb-12">
                <div className="inline-block p-4 bg-white rounded-[2.5rem] shadow-xl border-2 border-slate-200 mb-6">
-                  <BrandingLogo className="w-24 h-24 object-contain" />
+                  <BrandingLogo className="w-24 h-24 object-contain relative" />
                </div>
-              <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">{BRANDING.NAME.split(' ')[0]} <span className="text-indigo-600">{BRANDING.NAME.split(' ').slice(1).join(' ')}</span></h1>
+              <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">
+                {BRANDING.NAME.split(' ')[0]} <span className="text-indigo-600">{BRANDING.NAME.split(' ').slice(1).join(' ')}</span>
+              </h1>
               <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-[10px]">{BRANDING.SLOGAN}</p>
             </div>
             <button onClick={() => setPortal(UserRole.STUDENT)} className="group bg-white p-12 rounded-[3rem] border-2 border-slate-200 shadow-xl hover:border-emerald-500 transition-all text-center transform hover:-translate-y-2">
@@ -256,6 +244,7 @@ const App: React.FC = () => {
       ) : !activeUser ? (
         <Login 
           portalType={portal} 
+          institutes={institutes}
           departments={departments} 
           users={users}
           onLogin={handleLogin} 
@@ -265,9 +254,16 @@ const App: React.FC = () => {
           notify={notify} 
         />
       ) : (
-        <Layout role={activeUser.role} onRoleSwitch={handleLogout} appTheme={appTheme} onSetTheme={setAppTheme}>
+        <Layout 
+          role={activeUser.role} 
+          userName={activeUser.name}
+          onRoleSwitch={handleLogout} 
+          appTheme={appTheme} 
+          onSetTheme={setAppTheme}
+        >
           {activeUser.role === UserRole.ADMIN && (
             <AdminDashboard 
+              institutes={institutes}
               departments={departments} 
               users={users} 
               onAddDepartment={(d) => { setDepartments([...departments, d]); notify("Department Deployed", "success"); }} 
@@ -296,11 +292,14 @@ const App: React.FC = () => {
               <div className="max-w-4xl mx-auto py-10 space-y-12">
                  <div className="text-center space-y-6">
                     <div className="bg-white h-32 w-32 rounded-[32px] mx-auto flex items-center justify-center shadow-2xl transform -rotate-6 border-2 border-slate-200 p-4">
-                      <BrandingLogo className="w-full h-full object-contain" />
+                      <BrandingLogo className="w-full h-full object-contain relative" />
                     </div>
                     <div>
                       <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase">Greetings, <span className="text-emerald-600">{activeUser.name}</span></h1>
-                      <p className="text-slate-400 text-sm font-black uppercase tracking-[0.3em]">{departments.find(d => d.id === activeUser.departmentId)?.name || 'General Admission'}</p>
+                      <div className="flex flex-col items-center">
+                        <p className="text-slate-400 text-sm font-black uppercase tracking-[0.3em]">{institutes.find(i => i.id === activeUser.instituteId)?.name}</p>
+                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">{departments.find(d => d.id === activeUser.departmentId)?.name || 'General Admission'}</p>
+                      </div>
                     </div>
                  </div>
 

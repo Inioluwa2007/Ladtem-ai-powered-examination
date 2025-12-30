@@ -1,15 +1,16 @@
 
 import React, { useState } from 'react';
-import { UserRole, Department, User } from '../types';
+import { UserRole, Department, Institute, User } from '../types';
 import { BRANDING } from '../constants/branding';
 import { BrandingLogo } from '../App';
 
 interface LoginProps {
   portalType: UserRole;
+  institutes: Institute[];
   departments: Department[];
   users: User[];
   onLogin: (credentials: { email: string; password: string; role: UserRole }) => void;
-  onSignUp: (data: { name: string; email: string; password?: string; role: UserRole; departmentId: string }) => void;
+  onSignUp: (data: { name: string; email: string; password?: string; role: UserRole; instituteId: string; departmentId: string }) => void;
   onResetPassword: (email: string, role: UserRole, newPassword: string) => void;
   onBack: () => void;
   notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -17,30 +18,38 @@ interface LoginProps {
 
 type ResetStep = 'IDENTIFY' | 'VERIFY' | 'NEW_PASSWORD' | null;
 
-const Login: React.FC<LoginProps> = ({ portalType, departments, users, onLogin, onSignUp, onResetPassword, onBack, notify }) => {
+const Login: React.FC<LoginProps> = ({ portalType, institutes, departments, users, onLogin, onSignUp, onResetPassword, onBack, notify }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [resetStep, setResetStep] = useState<ResetStep>(null);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedInst, setSelectedInst] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  // Reset states
   const [resetCode, setResetCode] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
+  const filteredDepts = departments.filter(d => d.instituteId === selectedInst);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSignUp && !selectedDept) {
-      notify("Academic Department selection required.", "error");
-      return;
+    if (isSignUp) {
+      if (!selectedInst) {
+        notify("Institute selection required.", "error");
+        return;
+      }
+      if (!selectedDept) {
+        notify("Academic Department selection required.", "error");
+        return;
+      }
     }
     setIsLoading(true);
     setTimeout(() => {
       if (isSignUp) {
-        onSignUp({ name, email, password, role: portalType, departmentId: selectedDept });
+        onSignUp({ name, email, password, role: portalType, instituteId: selectedInst, departmentId: selectedDept });
         if (portalType === UserRole.EXAMINER) setIsSignUp(false);
         else onLogin({ email, password, role: portalType });
       } else {
@@ -77,7 +86,6 @@ const Login: React.FC<LoginProps> = ({ portalType, departments, users, onLogin, 
     e.preventDefault();
     onResetPassword(email, portalType, newPassword);
     setResetStep(null);
-    setResetEmail('');
     setNewPassword('');
     notify("Identity Node Restored.", "success");
   };
@@ -89,9 +97,6 @@ const Login: React.FC<LoginProps> = ({ portalType, departments, users, onLogin, 
   }[portalType];
 
   const brandParts = BRANDING.NAME.split(' ');
-
-  // Helper to set email and clear reset state
-  const setResetEmail = (val: string) => setEmail(val);
 
   if (resetStep) {
     return (
@@ -106,11 +111,6 @@ const Login: React.FC<LoginProps> = ({ portalType, departments, users, onLogin, 
               <BrandingLogo className="w-16 h-16 object-contain" />
             </div>
             <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Credential Recovery</h2>
-            <p className="mt-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              {resetStep === 'IDENTIFY' && 'Verify Institutional Identity'}
-              {resetStep === 'VERIFY' && 'Enter High-Security Code'}
-              {resetStep === 'NEW_PASSWORD' && 'Finalize Identity Node'}
-            </p>
           </div>
 
           <div className="bg-white p-10 rounded-[3rem] shadow-2xl border-2 border-slate-300">
@@ -139,7 +139,6 @@ const Login: React.FC<LoginProps> = ({ portalType, departments, users, onLogin, 
                   />
                 </div>
                 <button className={`w-full py-5 rounded-[2rem] font-black text-white shadow-xl ${theme.btn} uppercase tracking-widest text-xs`}>Verify Protocol</button>
-                <button type="button" onClick={() => setResetStep('IDENTIFY')} className="w-full text-[10px] font-black text-slate-400 uppercase tracking-widest">Resend Code</button>
               </form>
             )}
 
@@ -184,10 +183,17 @@ const Login: React.FC<LoginProps> = ({ portalType, departments, users, onLogin, 
                     <input required type="text" value={name} onChange={e => setName(e.target.value)} className="block w-full px-5 py-4 bg-slate-50 border-2 border-slate-400 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all" placeholder="Enter Full Name" />
                   </div>
                   <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Select Institute</label>
+                    <select required value={selectedInst} onChange={e => { setSelectedInst(e.target.value); setSelectedDept(''); }} className="block w-full px-5 py-4 bg-slate-50 border-2 border-slate-400 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all appearance-none">
+                      <option value="" disabled>Choose Institute...</option>
+                      {institutes.map(inst => <option key={inst.id} value={inst.id}>{inst.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Select Department</label>
-                    <select required value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="block w-full px-5 py-4 bg-slate-50 border-2 border-slate-400 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all appearance-none">
-                      <option value="" disabled>Choose Department...</option>
-                      {departments.map(dept => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
+                    <select required value={selectedDept} disabled={!selectedInst} onChange={e => setSelectedDept(e.target.value)} className="block w-full px-5 py-4 bg-slate-50 border-2 border-slate-400 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all appearance-none disabled:opacity-50">
+                      <option value="" disabled>{selectedInst ? 'Choose Department...' : 'Select Institute first'}</option>
+                      {filteredDepts.map(dept => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
                     </select>
                   </div>
                 </>
@@ -212,7 +218,7 @@ const Login: React.FC<LoginProps> = ({ portalType, departments, users, onLogin, 
           </form>
           {portalType !== UserRole.ADMIN && (
             <div className="mt-8 text-center">
-              <button onClick={() => setIsSignUp(!isSignUp)} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest underline decoration-2 underline-offset-4">{isSignUp ? 'Have account? Sign In' : 'New Identity? Create Access'}</button>
+              <button onClick={() => { setIsSignUp(!isSignUp); setSelectedInst(''); setSelectedDept(''); }} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest underline decoration-2 underline-offset-4">{isSignUp ? 'Have account? Sign In' : 'New Identity? Create Access'}</button>
             </div>
           )}
         </div>

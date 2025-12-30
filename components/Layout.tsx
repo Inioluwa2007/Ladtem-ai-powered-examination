@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { UserRole } from '../types';
 import { AppTheme, BrandingLogo } from '../App';
@@ -6,12 +7,13 @@ import { BRANDING } from '../constants/branding';
 interface LayoutProps {
   children: React.ReactNode;
   role: UserRole;
+  userName: string;
   onRoleSwitch: () => void;
   appTheme: AppTheme;
   onSetTheme: (theme: AppTheme) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, role, onRoleSwitch, appTheme, onSetTheme }) => {
+const Layout: React.FC<LayoutProps> = ({ children, role, userName, onRoleSwitch, appTheme, onSetTheme }) => {
   const [showThemeMenu, setShowThemeMenu] = useState(false);
 
   const themes: { id: AppTheme; name: string; bg: string; color: string }[] = [
@@ -65,13 +67,13 @@ const Layout: React.FC<LayoutProps> = ({ children, role, onRoleSwitch, appTheme,
               </div>
 
               <div className="hidden sm:flex flex-col items-end">
-                <span className={`text-[10px] font-bold uppercase tracking-[0.2em] ${
+                <span className="text-sm font-black text-slate-900 tracking-tight">{userName}</span>
+                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${
                   role === UserRole.ADMIN ? 'text-amber-500' : 
                   role === UserRole.EXAMINER ? 'text-indigo-500' : 'text-emerald-500'
                 }`}>
-                  {role} Account
+                  {role} Portal
                 </span>
-                <span className="text-xs font-bold text-slate-400">Secure Node</span>
               </div>
               <button 
                 onClick={onRoleSwitch}
