@@ -79,30 +79,37 @@ const LandingPage: React.FC<{ nodeId: string; cloudStatus: string; onOpenSync: (
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center p-6 transition-all duration-500 ${appTheme === 'slate' ? 'bg-slate-50' : appTheme === 'blue' ? 'bg-blue-50' : appTheme === 'emerald' ? 'bg-emerald-50' : 'bg-rose-50'}`}>
       <div className="absolute top-6 right-6 flex flex-col items-end space-y-2">
-         <button onClick={onOpenSync} className="flex items-center space-x-2 bg-white px-4 py-2 rounded-xl border-2 border-slate-200 shadow-sm hover:border-indigo-500 transition-all opacity-20 hover:opacity-100">
-           <div className={`w-2 h-2 rounded-full ${cloudStatus === 'READY' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400 animate-spin'}`}></div>
-           <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">ROOM: {nodeId}</span>
+         <button onClick={onOpenSync} className="flex items-center space-x-2 bg-white px-4 py-2 rounded-xl border-2 border-slate-200 shadow-sm hover:border-indigo-500 transition-all opacity-40 hover:opacity-100">
+           <div className={`w-2.5 h-2.5 rounded-full ${cloudStatus === 'READY' ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`}></div>
+           <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">NODE: {nodeId}</span>
          </button>
       </div>
+      
       <div className="max-w-2xl w-full text-center animate-in fade-in zoom-in-95 duration-700">
         <div className="mb-12">
-           <div className="inline-block p-6 bg-white rounded-[3rem] shadow-2xl border-2 border-slate-200 mb-8 transform -rotate-3 hover:rotate-0 transition-transform"><BrandingLogo className="w-28 h-28" /></div>
-           <h1 className="text-5xl font-black text-slate-900 uppercase mb-4 tracking-tighter">LADTEM <span className="text-indigo-600">COMMISSION</span></h1>
+           <div className="inline-block p-8 bg-white rounded-[3.5rem] shadow-2xl border-2 border-slate-200 mb-8 transform -rotate-2 hover:rotate-0 transition-all duration-500"><BrandingLogo className="w-32 h-32" /></div>
+           <h1 className="text-6xl font-black text-slate-900 uppercase mb-4 tracking-tighter">LADTEM <span className="text-indigo-600">COMMISSION</span></h1>
            <p className="text-slate-400 font-bold uppercase tracking-[0.4em] text-xs">{BRANDING.SLOGAN}</p>
         </div>
         
         <div className="flex justify-center">
-          <Link to="/student-login" className="group bg-white p-12 w-full max-w-sm rounded-[4rem] border-2 border-slate-200 shadow-2xl hover:border-emerald-500 transition-all transform hover:-translate-y-2 no-underline text-inherit block">
-            <div className="w-24 h-24 bg-emerald-50 text-emerald-600 rounded-[2rem] mx-auto flex items-center justify-center mb-8 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xl">
-              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" /></svg>
+          <Link to="/student-login" className="group bg-white p-12 w-full max-w-sm rounded-[4rem] border-2 border-slate-200 shadow-2xl hover:border-emerald-500 transition-all transform hover:-translate-y-3 no-underline text-inherit block">
+            <div className="w-28 h-28 bg-emerald-50 text-emerald-600 rounded-[2.5rem] mx-auto flex items-center justify-center mb-8 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xl">
+              <svg className="w-14 h-14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" /></svg>
             </div>
             <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter mb-2">Student Portal</h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Authorized Access Only</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Public Entry Point</p>
           </Link>
         </div>
         
-        <div className="mt-16 text-slate-300 font-black text-[9px] uppercase tracking-[0.3em]">
-          © {new Date().getFullYear()} LADTEM COMMISSION • NEURAL EVALUATION NODE
+        <div className="mt-20 flex flex-col items-center space-y-4">
+          <div className="w-16 h-1 bg-slate-200 rounded-full"></div>
+          <p className="text-slate-300 font-black text-[9px] uppercase tracking-[0.3em]">
+            © {new Date().getFullYear()} LADTEM COMMISSION • UNIVERSAL NEURAL SYNC
+          </p>
+          <div className="opacity-0 hover:opacity-10 text-[8px] font-black text-slate-400 flex space-x-4 uppercase tracking-widest transition-opacity">
+            <span>Hidden paths: /examiner-login • /admin-login</span>
+          </div>
         </div>
       </div>
     </div>
@@ -153,7 +160,6 @@ const AppContent: React.FC = () => {
 
   const [isExamActive, setIsExamActive] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<'IDLE' | 'PULLING' | 'READY' | 'ERROR'>('IDLE');
   
   const isInternalUpdate = useRef(false);
@@ -169,7 +175,7 @@ const AppContent: React.FC = () => {
     const currentState = { institutes, departments, users, exams, submissions, gradingResults };
     const checksum = JSON.stringify(currentState).length;
     if (checksum === lastSyncChecksum.current) return;
-    setIsSyncing(true);
+    
     const mergedState = await syncToCloud(nodeId, currentState, blobUrl);
     if (mergedState) {
       isInternalUpdate.current = true;
@@ -182,32 +188,33 @@ const AppContent: React.FC = () => {
       lastSyncChecksum.current = JSON.stringify(mergedState).length;
       setTimeout(() => { isInternalUpdate.current = false; }, 500);
     }
-    setIsSyncing(false);
   }, [nodeId, blobUrl, institutes, departments, users, exams, submissions, gradingResults]);
 
   const triggerPull = useCallback(async (silent = false) => {
     if (!silent) setCloudStatus('PULLING');
-    setIsSyncing(true);
     const cloudState = await fetchFromCloud(nodeId, blobUrl);
     if (cloudState) {
-      setDepartments(current => mergeStates({ institutes, departments: current, users, exams, submissions, gradingResults }, cloudState).departments);
-      setUsers(current => mergeStates({ institutes, departments, users: current, exams, submissions, gradingResults }, cloudState).users);
-      setInstitutes(current => mergeStates({ institutes: current, departments, users, exams, submissions, gradingResults }, cloudState).institutes);
-      setExams(current => mergeStates({ institutes, departments, users, exams: current, submissions, gradingResults }, cloudState).exams);
-      setSubmissions(current => mergeStates({ institutes, departments, users, exams, submissions: current, gradingResults }, cloudState).submissions);
-      setGradingResults(current => mergeStates({ institutes, departments, users, exams, submissions, gradingResults: current }, cloudState).gradingResults);
-      if (!silent) notify("Neural Sync Refreshed", "success");
+      const currentState = { institutes, departments, users, exams, submissions, gradingResults };
+      const merged = mergeStates(currentState, cloudState);
+      
+      setDepartments(merged.departments);
+      setUsers(merged.users);
+      setInstitutes(merged.institutes);
+      setExams(merged.exams);
+      setSubmissions(merged.submissions);
+      setGradingResults(merged.gradingResults);
+      
+      if (!silent) notify("Neural Sync Successful", "success");
     }
     hasInitialPullCompleted.current = true;
     setCloudStatus('READY');
-    setIsSyncing(false);
   }, [nodeId, blobUrl, notify, institutes, departments, users, exams, submissions, gradingResults]);
 
   useEffect(() => {
     triggerPull();
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') triggerPull(true);
-    }, 30000); 
+    }, 15000); // 15s interval for better "simultaneous" feel
     return () => clearInterval(interval);
   }, [triggerPull]);
 
@@ -242,11 +249,11 @@ const AppContent: React.FC = () => {
     }
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role);
     if (!user || (user.password && user.password !== password)) {
-      notify("Authentication Failed: Check Email/Password", "error"); 
+      notify("Authentication Failed", "error"); 
       return;
     }
     if (role === UserRole.EXAMINER && !user.isApproved) {
-      notify("Access Pending Verification", "info"); 
+      notify("Access Pending Approval", "info"); 
       return;
     }
     setActiveUser(user);
@@ -263,7 +270,7 @@ const AppContent: React.FC = () => {
       isApproved: data.role === UserRole.STUDENT 
     };
     setUsers(prev => [...prev, newUser]);
-    notify("Account Registered Successfully.", "success");
+    notify("Registration Complete", "success");
     setTimeout(() => triggerPush(), 500);
   };
 
@@ -285,7 +292,7 @@ const AppContent: React.FC = () => {
     };
     setSubmissions(prev => [...prev, newSubmission]);
     setIsExamActive(false);
-    notify("Assessment Transmitted Successfully.", "success");
+    notify("Submitting Assessment...", "info");
     try {
       const grading = await gradeSubmission(exam, newSubmission);
       if (grading) {
@@ -301,10 +308,10 @@ const AppContent: React.FC = () => {
         };
         setGradingResults(prev => [...prev, result]);
         setSubmissions(prev => prev.map(s => s.id === newSubmission.id ? { ...s, status: 'GRADED' } : s));
-        notify("AI Evaluation Node Processed Results.", "info");
+        notify("AI Evaluation Complete", "success");
       }
     } catch (err) {
-      notify("AI evaluation delay. Manual examiner review recommended.", "error");
+      notify("AI evaluation delay. Manual review available.", "error");
     }
   };
 
@@ -312,7 +319,7 @@ const AppContent: React.FC = () => {
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
     setActiveUser(null); 
     setIsExamActive(false); 
-    notify("Session Logged Out", "info");
+    notify("Logged Out", "info");
     navigate('/');
   };
 
@@ -361,7 +368,7 @@ const AppContent: React.FC = () => {
                    <div className="text-center space-y-6">
                       <div className="bg-white h-32 w-32 rounded-[32px] mx-auto flex items-center justify-center shadow-2xl border-2 border-slate-200 p-4"><BrandingLogo className="w-full h-full" /></div>
                       <h1 className="text-5xl font-black text-slate-900 uppercase tracking-tighter">Welcome, <span className="text-emerald-600">{activeUser.name}</span></h1>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Node ID: {nodeId}</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Node ID: {nodeId}</p>
                    </div>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
@@ -376,7 +383,7 @@ const AppContent: React.FC = () => {
                       <div className="bg-white p-10 rounded-[40px] border-2 border-slate-200 shadow-xl space-y-8 h-full">
                          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-4">Academic Results</h3>
                          <div className="space-y-4">
-                           {gradingResults.filter(r => r.isPublished && submissions.some(s => s.id === r.submissionId && s.studentId === activeUser.id)).length === 0 ? <p className="text-slate-400 font-bold italic text-sm text-center py-10">No grades released.</p> : gradingResults.filter(r => r.isPublished && submissions.some(s => s.id === r.submissionId && s.studentId === activeUser.id)).map(res => (
+                           {gradingResults.filter(r => r.isPublished && submissions.some(s => s.id === r.submissionId && s.studentId === activeUser.id)).length === 0 ? <p className="text-slate-400 font-bold italic text-sm text-center py-10">No grades released yet.</p> : gradingResults.filter(r => r.isPublished && submissions.some(s => s.id === r.submissionId && s.studentId === activeUser.id)).map(res => (
                              <div key={res.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
                                <p className="font-bold text-slate-900 text-sm">{exams.find(e => e.id === res.examId)?.title}</p>
                                <span className="text-xl font-black text-emerald-600">{res.finalGrade}%</span>
