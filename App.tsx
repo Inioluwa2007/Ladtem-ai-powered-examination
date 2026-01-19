@@ -98,7 +98,7 @@ const LandingPage: React.FC<{ nodeId: string; cloudStatus: string; onOpenSync: (
               <svg className="w-14 h-14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" /></svg>
             </div>
             <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter mb-2">Student Portal</h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Public Entry Point</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Authorized Entry Only</p>
           </Link>
         </div>
         
@@ -165,6 +165,7 @@ const AppContent: React.FC = () => {
   const isInternalUpdate = useRef(false);
   const hasInitialPullCompleted = useRef(false);
   const lastSyncChecksum = useRef<number>(0);
+  const isSyncing = useRef(false);
 
   const notify = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ message, type });
@@ -176,6 +177,7 @@ const AppContent: React.FC = () => {
     const checksum = JSON.stringify(currentState).length;
     if (checksum === lastSyncChecksum.current) return;
     
+    isSyncing.current = true;
     const mergedState = await syncToCloud(nodeId, currentState, blobUrl);
     if (mergedState) {
       isInternalUpdate.current = true;
@@ -188,10 +190,12 @@ const AppContent: React.FC = () => {
       lastSyncChecksum.current = JSON.stringify(mergedState).length;
       setTimeout(() => { isInternalUpdate.current = false; }, 500);
     }
+    isSyncing.current = false;
   }, [nodeId, blobUrl, institutes, departments, users, exams, submissions, gradingResults]);
 
   const triggerPull = useCallback(async (silent = false) => {
     if (!silent) setCloudStatus('PULLING');
+    isSyncing.current = true;
     const cloudState = await fetchFromCloud(nodeId, blobUrl);
     if (cloudState) {
       const currentState = { institutes, departments, users, exams, submissions, gradingResults };
@@ -204,17 +208,18 @@ const AppContent: React.FC = () => {
       setSubmissions(merged.submissions);
       setGradingResults(merged.gradingResults);
       
-      if (!silent) notify("Neural Sync Successful", "success");
+      if (!silent) notify("Neural Sync Refreshed", "success");
     }
     hasInitialPullCompleted.current = true;
     setCloudStatus('READY');
+    isSyncing.current = false;
   }, [nodeId, blobUrl, notify, institutes, departments, users, exams, submissions, gradingResults]);
 
   useEffect(() => {
     triggerPull();
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') triggerPull(true);
-    }, 15000); // 15s interval for better "simultaneous" feel
+    }, 10000); // 10s for better simultaneous feel
     return () => clearInterval(interval);
   }, [triggerPull]);
 
@@ -253,12 +258,12 @@ const AppContent: React.FC = () => {
       return;
     }
     if (role === UserRole.EXAMINER && !user.isApproved) {
-      notify("Access Pending Approval", "info"); 
+      notify("Access Pending Verification", "info"); 
       return;
     }
     setActiveUser(user);
     localStorage.setItem(STORAGE_KEYS.ACTIVE_USER, JSON.stringify(user));
-    notify(`Welcome Back, ${user.name}`, "success");
+    notify(`Welcome, ${user.name}`, "success");
     navigate('/dashboard');
   };
 
@@ -270,7 +275,7 @@ const AppContent: React.FC = () => {
       isApproved: data.role === UserRole.STUDENT 
     };
     setUsers(prev => [...prev, newUser]);
-    notify("Registration Complete", "success");
+    notify("Identity Registered Successfully.", "success");
     setTimeout(() => triggerPush(), 500);
   };
 
@@ -292,7 +297,7 @@ const AppContent: React.FC = () => {
     };
     setSubmissions(prev => [...prev, newSubmission]);
     setIsExamActive(false);
-    notify("Submitting Assessment...", "info");
+    notify("Assessment Transmitted Successfully.", "success");
     try {
       const grading = await gradeSubmission(exam, newSubmission);
       if (grading) {
@@ -308,10 +313,10 @@ const AppContent: React.FC = () => {
         };
         setGradingResults(prev => [...prev, result]);
         setSubmissions(prev => prev.map(s => s.id === newSubmission.id ? { ...s, status: 'GRADED' } : s));
-        notify("AI Evaluation Complete", "success");
+        notify("AI Evaluation Node Processed Results.", "success");
       }
     } catch (err) {
-      notify("AI evaluation delay. Manual review available.", "error");
+      notify("AI evaluation delay. Manual review recommended.", "error");
     }
   };
 
@@ -319,7 +324,7 @@ const AppContent: React.FC = () => {
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER);
     setActiveUser(null); 
     setIsExamActive(false); 
-    notify("Logged Out", "info");
+    notify("Session Logged Out", "info");
     navigate('/');
   };
 
@@ -330,8 +335,15 @@ const AppContent: React.FC = () => {
       {isSyncHubOpen && (
         <SyncHub 
           currentNodeId={nodeId} 
-          onConnectNode={(id) => { setNodeId(id); hasInitialPullCompleted.current = false; triggerPull(); }} 
+          onConnectNode={(id) => { 
+            setNodeId(id); 
+            hasInitialPullCompleted.current = false; 
+            triggerPull(); 
+            notify(`Switching to Node: ${id}`, "info");
+          }} 
+          onManualSync={() => triggerPull(false)}
           onClose={() => setIsSyncHubOpen(false)} 
+          isSyncing={isSyncing.current}
         />
       )}
 
