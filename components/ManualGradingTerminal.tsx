@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Exam, Submission, QuestionGrade, GradingResult, QuestionType } from '../types';
 
@@ -10,17 +9,22 @@ interface ManualGradingTerminalProps {
 }
 
 const ManualGradingTerminal: React.FC<ManualGradingTerminalProps> = ({ exam, submission, onSave, onCancel }) => {
+  // Using explicit type cast for initial value in reduce to ensure Record<string, number> consistency
   const [questionScores, setQuestionScores] = useState<Record<string, number>>(
-    submission.answers.reduce((acc, ans) => ({ ...acc, [ans.questionId]: 0 }), {})
+    submission.answers.reduce((acc, ans) => ({ ...acc, [ans.questionId]: 0 }), {} as Record<string, number>)
   );
+  // Using explicit type cast for initial value in reduce to ensure Record<string, string> consistency
   const [questionFeedback, setQuestionFeedback] = useState<Record<string, string>>(
-    submission.answers.reduce((acc, ans) => ({ ...acc, [ans.questionId]: '' }), {})
+    submission.answers.reduce((acc, ans) => ({ ...acc, [ans.questionId]: '' }), {} as Record<string, string>)
   );
 
   const calculateFinalGrade = () => {
-    const totalPossible = exam.questions.reduce((sum, q) => sum + q.maxPoints, 0);
-    const totalEarned = Object.values(questionScores).reduce((sum, s) => sum + s, 0);
-    return Math.round((totalEarned / totalPossible) * 100);
+    // Explicitly typing sum to avoid 'unknown' type errors during arithmetic addition
+    const totalPossible = exam.questions.reduce((sum: number, q) => sum + q.maxPoints, 0);
+    // Explicitly typing reduce parameters to resolve '+' operator errors with unknown types
+    const totalEarned = (Object.values(questionScores) as number[]).reduce((sum: number, s: number) => sum + s, 0);
+    // Ensuring numeric operands for division and handling division by zero
+    return Math.round((totalEarned / (totalPossible || 1)) * 100);
   };
 
   const handleSubmit = () => {

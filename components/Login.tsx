@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { UserRole, Department, Institute, User } from '../types';
 import { BRANDING } from '../constants/branding';
-import { BrandingLogo } from '../App';
+import { BrandingLogo } from './Branding';
 
 interface LoginProps {
   portalType: UserRole;

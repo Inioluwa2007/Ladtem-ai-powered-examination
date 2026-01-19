@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Exam, Submission, GradingResult, QuestionType } from "../types";
 
@@ -7,15 +6,13 @@ import { Exam, Submission, GradingResult, QuestionType } from "../types";
  * Uses Gemini-3-Pro for complex academic evaluation.
  */
 const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined') {
-    throw new Error("LADTEM SECURITY CRITICAL: API_KEY is missing. Ensure the 'API_KEY' environment variable is set in Vercel.");
-  }
-  return new GoogleGenAI({ apiKey });
+  // Directly using process.env.API_KEY string for initialization as per guidelines
+  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 };
 
 export const gradeSubmission = async (exam: Exam, submission: Submission): Promise<Partial<GradingResult>> => {
   const ai = getAIClient();
+  // Using gemini-3-pro-preview for advanced academic reasoning and grading
   const model = 'gemini-3-pro-preview';
   
   const systemInstruction = `You are a senior academic examiner for the Ladtem Commission. 
@@ -105,6 +102,7 @@ export const gradeSubmission = async (exam: Exam, submission: Submission): Promi
     }
   });
 
+  // Extract string output directly using the .text property as per GenerateContentResponse guidelines
   const rawText = response.text || '{}';
   const resultData = JSON.parse(rawText);
 

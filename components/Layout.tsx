@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { UserRole } from '../types';
-import { AppTheme, BrandingLogo } from '../App';
+import { UserRole, AppTheme } from '../types';
+import { BrandingLogo } from './Branding';
 import { BRANDING } from '../constants/branding';
 
 interface LayoutProps {

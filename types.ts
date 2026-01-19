@@ -11,6 +11,8 @@ export enum QuestionType {
   VOICE = 'VOICE'
 }
 
+export type AppTheme = 'slate' | 'blue' | 'emerald' | 'rose';
+
 export interface QuestionOption {
   id: string;
   text: string;
